@@ -82,7 +82,7 @@ impl<'a, T: ?Sized> MoveRef<'a, T> {
   ///
   /// `drop_flag`'s value must not be dead, and must be a drop flag governing
   /// the destruction of `ptr`'s storage in an appropriate manner as described
-  /// in [`moveit::drop_flag`][crate::drop_flag].
+  /// in [`moveit2::drop_flag`][crate::drop_flag].
   #[inline]
   pub unsafe fn new_unchecked(ptr: &'a mut T, drop_flag: DropFlag<'a>) -> Self {
     Self { ptr, drop_flag }
@@ -126,7 +126,7 @@ impl<'a, T> MoveRef<'a, T> {
   /// Consumes `self`, blindly casting the inner pointer to `U`.
   pub(crate) unsafe fn cast<U>(mut self) -> MoveRef<'a, U> {
     let mr = MoveRef {
-      ptr: &mut *Self::as_mut_ptr(&mut self).cast(),
+      ptr: unsafe { &mut *Self::as_mut_ptr(&mut self).cast() },
       drop_flag: self.drop_flag,
     };
     mem::forget(self);
@@ -219,9 +219,9 @@ pub trait AsMove: Deref + Sized {
   /// This function is best paired with [`moveit!()`]:
   /// ```
   /// # use core::pin::Pin;
-  /// # use moveit::{moveit, slot::DroppingSlot, move_ref::AsMove};
+  /// # use moveit2::{moveit, slot::DroppingSlot, move_ref::AsMove};
   /// let ptr = Box::pin(5);
-  /// moveit::slot!(#[dropping] storage);
+  /// moveit2::slot!(#[dropping] storage);
   /// ptr.as_move(storage);
   /// ```
   /// Taking a trip through [`moveit!()`] is unavoidable due to the nature of
@@ -362,7 +362,7 @@ impl<P: DerefMove> AsMove for Pin<P> {
 /// of [`MoveRef`] is upheld. In particular, the following function *must not*
 /// violate memory safety:
 /// ```
-/// # use moveit::{DerefMove, MoveRef, moveit};
+/// # use moveit2::{DerefMove, MoveRef, moveit};
 /// fn move_out_of<P>(p: P) -> P::Target
 /// where
 ///   P: DerefMove,
@@ -418,15 +418,15 @@ unsafe impl<'a, T: ?Sized> DerefMove for MoveRef<'a, T> {
 
 /// Note that `DerefMove` cannot be used to move out of a `Pin<P>` when `P::Target: !Unpin`.
 /// ```compile_fail
-/// # use crate::{moveit::{Emplace, MoveRef, moveit}};
+/// # use crate::{moveit2::{Emplace, MoveRef, moveit}};
 /// # use core::{marker::PhantomPinned, pin::Pin};
 /// // Fails to compile because `Box<PhantomPinned>: Deref<Target = PhantomPinned>` and `PhantomPinned: !Unpin`.
-/// let ptr: Pin<Box<PhantomPinned>> = Box::emplace(moveit::new::default::<PhantomPinned>());
+/// let ptr: Pin<Box<PhantomPinned>> = Box::emplace(moveit2::new::default::<PhantomPinned>());
 /// moveit!(let mref = &move *ptr);
 ///
 /// // Fails to compile because `MoveRef<PhantomPinned>: Deref<Target = PhantomPinned>` and `PhantomPinned: !Unpin`.
 /// moveit! {
-///   let mref0: Pin<MoveRef<PhantomPinned>> = moveit::new::default::<PhantomPinned>();
+///   let mref0: Pin<MoveRef<PhantomPinned>> = moveit2::new::default::<PhantomPinned>();
 ///   let mref1 = &move *mref0;
 /// }
 unsafe impl<P> DerefMove for Pin<P>
@@ -477,7 +477,7 @@ pub mod __macro {
 ///
 /// This macro allows for three exotic types of `let` bindings:
 /// ```
-/// # use moveit::{moveit, new, move_ref::MoveRef};
+/// # use moveit2::{moveit, new, move_ref::MoveRef};
 /// # use core::pin::Pin;
 /// let bx = Box::new(42);
 ///
@@ -504,7 +504,7 @@ pub mod __macro {
 /// a temporary (which cannot outlive its complete expression) is created:
 ///
 /// ```
-/// # use moveit::{moveit, new, move_ref::MoveRef};
+/// # use moveit2::{moveit, new, move_ref::MoveRef};
 /// # use core::pin::Pin;
 /// fn do_thing(x: Pin<MoveRef<i32>>) {
 ///   // ...
@@ -516,7 +516,7 @@ pub mod __macro {
 ///
 /// Note that these bindings cannot outlive the subexpression:
 /// ```compile_fail
-/// # use moveit::{moveit, new};
+/// # use moveit2::{moveit, new};
 /// let x = moveit!(new::of(42));
 /// let y = *x;  // Borrow checker error.
 /// ```
@@ -577,9 +577,9 @@ macro_rules! moveit {
 
 #[cfg(test)]
 pub(crate) mod test {
-  use crate::new;
   use crate::MoveNew;
   use crate::New;
+  use crate::new;
 
   use super::*;
   use std::alloc;

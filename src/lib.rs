@@ -67,9 +67,9 @@
 //! use std::ptr;
 //! use std::ptr::NonNull;
 //!
-//! use moveit::new;
-//! use moveit::new::New;
-//! use moveit::moveit;
+//! use moveit2::new;
+//! use moveit2::new::New;
+//! use moveit2::moveit;
 //!
 //! // This is a self-referential struct because the slice field points to the
 //! // data field. We cannot inform the compiler about that with a normal

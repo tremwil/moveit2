@@ -20,7 +20,7 @@
 //!
 //! [`Slot`]s mut be created with the [`slot!()`] macro:
 //! ```
-//! # use moveit::{slot};
+//! # use moveit2::{slot};
 //! slot!(storage);
 //! let mut x = storage.put(42);
 //! *x /= 2;
@@ -33,7 +33,7 @@
 //!
 //! [`Slot`]s can also be used to implement a sort of "guaranteed RVO":
 //! ```
-//! # use moveit::{slot, Slot, move_ref::MoveRef};
+//! # use moveit2::{slot, Slot, move_ref::MoveRef};
 //! fn returns_on_the_stack(val: i32, storage: Slot<i32>) -> Option<MoveRef<i32>> {
 //!   if val == 0 {
 //!     return None
@@ -95,7 +95,7 @@ impl<'frame, T> Slot<'frame, T> {
   ///
   /// `drop_flag`'s value must be dead, and must be a drop flag governing
   /// the destruction of `ptr`'s storage in an appropriate manner as described
-  /// in [`moveit::drop_flag`][crate::drop_flag].
+  /// in [`moveit2::drop_flag`][crate::drop_flag].
   pub unsafe fn new_unchecked(
     ptr: &'frame mut MaybeUninit<T>,
     drop_flag: DropFlag<'frame>,
@@ -151,8 +151,8 @@ impl<'frame, T> Slot<'frame, T> {
   /// some other type `U`.
   ///
   /// ```
-  /// # use moveit::{Slot, MoveRef};
-  /// moveit::slot!(place: u32);
+  /// # use moveit2::{Slot, MoveRef};
+  /// moveit2::slot!(place: u32);
   /// let foo: MoveRef<u16> = unsafe { place.cast::<u16>() }.put(42);
   /// ```
   ///
@@ -163,7 +163,7 @@ impl<'frame, T> Slot<'frame, T> {
     debug_assert!(mem::size_of::<T>() >= mem::size_of::<U>());
     debug_assert!(mem::align_of::<T>() >= mem::align_of::<U>());
     Slot {
-      ptr: &mut *self.ptr.as_mut_ptr().cast(),
+      ptr: unsafe { &mut *self.ptr.as_mut_ptr().cast() },
       drop_flag: self.drop_flag,
     }
   }
@@ -215,7 +215,7 @@ impl<'frame, T> DroppingSlot<'frame, T> {
   ///
   /// `drop_flag`'s value must be dead, and must be a drop flag governing
   /// the destruction of `ptr`'s storage in an appropriate manner as described
-  /// in [`moveit::drop_flag`][crate::drop_flag].
+  /// in [`moveit2::drop_flag`][crate::drop_flag].
   pub unsafe fn new_unchecked(
     ptr: &'frame mut MaybeUninit<T>,
     drop_flag: DropFlag<'frame>,
@@ -237,7 +237,7 @@ impl<'frame, T> DroppingSlot<'frame, T> {
   /// destructor is run; that is the caller's responsibility, by decrementing
   /// the given [`DropFlag`].
   pub unsafe fn pin(self, val: T) -> (Pin<&'frame mut T>, DropFlag<'frame>) {
-    self.emplace(new::of(val))
+    unsafe { self.emplace(new::of(val)) }
   }
 
   /// Emplace `new` into this slot, returning a reference to it.
@@ -251,7 +251,7 @@ impl<'frame, T> DroppingSlot<'frame, T> {
     self,
     new: N,
   ) -> (Pin<&'frame mut T>, DropFlag<'frame>) {
-    match self.try_emplace(new) {
+    match unsafe { self.try_emplace(new) } {
       Ok((x, d)) => (x, d),
       Err(e) => match e {},
     }
@@ -269,11 +269,13 @@ impl<'frame, T> DroppingSlot<'frame, T> {
     new: N,
   ) -> Result<(Pin<&'frame mut T>, DropFlag<'frame>), N::Error> {
     self.drop_flag.inc();
-    new.try_new(Pin::new_unchecked(self.ptr))?;
-    Ok((
-      Pin::new_unchecked(self.ptr.assume_init_mut()),
-      self.drop_flag,
-    ))
+    unsafe {
+      new.try_new(Pin::new_unchecked(self.ptr))?;
+      Ok((
+        Pin::new_unchecked(self.ptr.assume_init_mut()),
+        self.drop_flag,
+      ))
+    }
   }
 }
 
@@ -301,7 +303,7 @@ pub mod __macro {
     // Workaround for `unsafe {}` unhygine wrt to lints.
     //
     // This function is still `unsafe`.
-    pub fn new_unchecked_hygine_hack(&mut self) -> DroppingSlot<T> {
+    pub fn new_unchecked_hygine_hack(&mut self) -> DroppingSlot<'_, T> {
       unsafe {
         DroppingSlot::new_unchecked(&mut self.val, self.drop_flag.flag())
       }
@@ -333,7 +335,7 @@ pub mod __macro {
 /// move with the [`Slot`], it must be constructed using this macro. For
 /// example:
 /// ```
-/// moveit::slot!(x, y: bool);
+/// moveit2::slot!(x, y: bool);
 /// let x = x.put(5);
 /// let y = y.put(false);
 /// ```
@@ -349,15 +351,15 @@ pub mod __macro {
 /// part of a larger expression:
 ///
 /// ```compile_fail
-/// # use moveit::Slot;
-/// let bad: Slot<i32> = moveit::slot!();
+/// # use moveit2::Slot;
+/// let bad: Slot<i32> = moveit2::slot!();
 /// bad.put(4);  // Borrow check error.
 /// ```
 ///
 /// ```
-/// # use moveit::Slot;
+/// # use moveit2::Slot;
 /// fn do_thing(x: Slot<i32>) { /* ... */ }
-/// do_thing(moveit::slot!())
+/// do_thing(moveit2::slot!())
 /// ```
 #[macro_export]
 macro_rules! slot {

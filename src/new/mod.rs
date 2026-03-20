@@ -16,7 +16,7 @@
 //!
 //! This module provides a range of helpers such as [`new::by()`] and
 //! [`new::from()`] for creating constructors. It is preferred style to
-//! `use moveit::new;` and refer to these helpers with a `new::` prefix.
+//! `use moveit2::new;` and refer to these helpers with a `new::` prefix.
 
 use core::convert::Infallible;
 use core::mem::MaybeUninit;
@@ -68,7 +68,7 @@ pub unsafe trait New: Sized {
   /// This function is best combined with other helpers:
   ///
   /// ```
-  /// # use moveit::{new, moveit, New};
+  /// # use moveit2::{new, moveit, New};
   /// # use std::pin::Pin;
   /// pub struct MyType { /* ... */ }
   ///
@@ -137,7 +137,7 @@ unsafe impl<N: New> TryNew for N {
     self,
     this: Pin<&mut MaybeUninit<Self::Output>>,
   ) -> Result<(), Self::Error> {
-    self.new(this);
+    unsafe { self.new(this) };
     Ok(())
   }
 }
@@ -167,7 +167,7 @@ pub trait Emplace<T>: Sized + Deref {
 
   /// Constructs a new smart pointer and tries to emplace `n` into its storage.
   fn try_emplace<N: TryNew<Output = T>>(n: N)
-    -> Result<Self::Output, N::Error>;
+  -> Result<Self::Output, N::Error>;
 }
 
 impl<T> Emplace<T> for Box<T> {
@@ -231,9 +231,9 @@ where
   type Output = N::Output;
   #[inline]
   unsafe fn new(self, mut this: Pin<&mut MaybeUninit<Self::Output>>) {
-    self.0.new(this.as_mut());
+    unsafe { self.0.new(this.as_mut()) };
     // Now that `new()` has returned, we can assume `this` is initialized.
-    let this = this.map_unchecked_mut(|x| x.assume_init_mut());
+    let this = unsafe { this.map_unchecked_mut(|x| x.assume_init_mut()) };
     (self.1)(this)
   }
 }
@@ -252,9 +252,9 @@ where
     self,
     mut this: Pin<&mut MaybeUninit<Self::Output>>,
   ) -> Result<(), Self::Error> {
-    self.0.try_new(this.as_mut())?;
+    unsafe { self.0.try_new(this.as_mut())? };
     // Now that `new()` has returned, we can assume `this` is initialized.
-    let this = this.map_unchecked_mut(|x| x.assume_init_mut());
+    let this = unsafe { this.map_unchecked_mut(|x| x.assume_init_mut()) };
     (self.1)(this)
   }
 }

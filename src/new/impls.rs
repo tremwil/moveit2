@@ -30,9 +30,11 @@ macro_rules! trivial_move {
         src: Pin<MoveRef<Self>>,
         this: Pin<&mut MaybeUninit<Self>>,
       ) {
-        let src = Pin::into_inner_unchecked(src);
-        let this = Pin::into_inner_unchecked(this);
-        this.write(MoveRef::into_inner(src));
+        unsafe {
+          let src = Pin::into_inner_unchecked(src);
+          let this = Pin::into_inner_unchecked(this);
+          this.write(MoveRef::into_inner(src));
+        }
       }
     }
 
@@ -55,9 +57,11 @@ macro_rules! trivial_copy {
         src: Pin<MoveRef<Self>>,
         this: Pin<&mut MaybeUninit<Self>>,
       ) {
-        let src = Pin::into_inner_unchecked(src);
-        let this = Pin::into_inner_unchecked(this);
-        this.write(MoveRef::into_inner(src));
+        unsafe {
+          let src = Pin::into_inner_unchecked(src);
+          let this = Pin::into_inner_unchecked(this);
+          this.write(MoveRef::into_inner(src));
+        }
       }
     }
 
@@ -76,7 +80,7 @@ macro_rules! trivial_copy {
         src: &Self,
         this: Pin<&mut MaybeUninit<Self>>,
       ) {
-        let this = Pin::into_inner_unchecked(this);
+        let this = unsafe { Pin::into_inner_unchecked(this) };
         this.write(src.clone());
       }
     }

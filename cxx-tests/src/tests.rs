@@ -12,13 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![allow(unsafe_op_in_unsafe_fn)]
+
 use once_cell::sync::OnceCell;
 use std::sync::Mutex;
 use std::sync::MutexGuard;
 
 use cxx::UniquePtr;
-use moveit::moveit;
-use moveit::Emplace;
+use moveit2::Emplace;
+use moveit2::moveit;
 
 #[cxx::bridge]
 mod ffi {
@@ -63,17 +65,16 @@ mod ffi {
 mod bindgenish {
   use std::marker::PhantomData;
   use std::marker::PhantomPinned;
-  use std::mem;
   use std::mem::MaybeUninit;
   use std::pin::Pin;
 
+  use cxx::ExternType;
   use cxx::kind::Opaque;
   use cxx::type_id;
-  use cxx::ExternType;
 
-  use moveit::MakeCppStorage;
-  use moveit::MoveNew;
-  use moveit::New;
+  use moveit2::MakeCppStorage;
+  use moveit2::MoveNew;
+  use moveit2::New;
 
   #[repr(C)]
   pub struct Foo {
@@ -100,7 +101,7 @@ mod bindgenish {
   impl Foo {
     pub fn new() -> impl New<Output = Self> {
       unsafe {
-        moveit::new::by_raw(|space| {
+        moveit2::new::by_raw(|space| {
           let space = Pin::into_inner_unchecked(space).as_mut_ptr();
           super::ffi::foo_constructor(space)
         })
@@ -110,7 +111,7 @@ mod bindgenish {
 
   unsafe impl MoveNew for Foo {
     unsafe fn move_new(
-      mut src: Pin<moveit::MoveRef<Self>>,
+      mut src: Pin<moveit2::MoveRef<Self>>,
       this: Pin<&mut MaybeUninit<Self>>,
     ) {
       let src: &mut _ = Pin::into_inner_unchecked(src.as_mut());
@@ -151,7 +152,7 @@ mod bindgenish {
   impl Bar {
     pub fn new() -> impl New<Output = Self> {
       unsafe {
-        moveit::new::by_raw(|space| {
+        moveit2::new::by_raw(|space| {
           let space = Pin::into_inner_unchecked(space).as_mut_ptr();
           super::ffi::bar_constructor(space)
         })
@@ -161,11 +162,11 @@ mod bindgenish {
 
   unsafe impl MoveNew for Bar {
     unsafe fn move_new(
-      mut src: Pin<moveit::MoveRef<Self>>,
+      mut src: Pin<moveit2::MoveRef<Self>>,
       this: Pin<&mut MaybeUninit<Self>>,
     ) {
       let src: &mut _ = Pin::into_inner_unchecked(src.as_mut());
-      let this = mem::transmute(this);
+      let this = this.as_ptr().cast_mut();
       super::ffi::bar_move(this, src);
       super::ffi::bar_destructor(src);
     }
@@ -181,7 +182,7 @@ mod bindgenish {
 /// Queries C++ to find the current state of object lifetimes.
 /// Its main purpose is actually to sneakily enforce a mutex such that
 /// tests do not run in parallel and corrupt that state.
-struct StatusChecker<'a>(MutexGuard<'a, ()>);
+struct StatusChecker<'a>(#[allow(unused)] MutexGuard<'a, ()>);
 
 impl<'a> StatusChecker<'a> {
   fn new() -> Self {
@@ -282,7 +283,7 @@ fn test_move_from_up() {
   status_checker.assert_status(ffi::Status::Unallocated);
   let bar = UniquePtr::emplace(bindgenish::Bar::new());
   status_checker.assert_status(ffi::Status::Initialized);
-  moveit!(let bar2 = moveit::new::mov(bar));
+  moveit!(let bar2 = moveit2::new::mov(bar));
   // No custom operator::delete for this type
   status_checker.assert_status(ffi::Status::DeallocatedUninitialized);
   drop(bar2);
@@ -298,11 +299,11 @@ fn test_move_from_up_complex() {
   assert!(!foo.GetA());
   foo.pin_mut().Modify();
   assert!(foo.GetA());
-  moveit!(let mut foo2 = moveit::new::mov(foo));
+  moveit!(let mut foo2 = moveit2::new::mov(foo));
   // If this line determines the status to be DeallocatedUninitialized,
   // we've failed to call the overridden operator delete
   status_checker.assert_status(ffi::Status::Deallocated);
-  assert_eq!(foo2.GetA(), true);
+  assert!(foo2.GetA());
   drop(foo2);
   status_checker.assert_status(ffi::Status::Destructed);
 }

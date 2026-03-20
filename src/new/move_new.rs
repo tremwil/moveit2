@@ -47,7 +47,7 @@ pub unsafe trait MoveNew: Sized {
 /// Returns a [`New`] that forwards to [`MoveNew`].
 ///
 /// ```
-/// # use moveit::{MoveRef, moveit, new};
+/// # use moveit2::{MoveRef, moveit, new};
 /// let foo = Box::new(42);
 /// moveit! {
 ///   let bar = &move foo;

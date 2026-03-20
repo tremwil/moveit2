@@ -1,6 +1,17 @@
-# moveit
+# moveit2
 
 A library for safe, in-place construction of Rust (and C++!) objects.
+
+This a maintained for of `moveit`, which has been archived by Google in 2024,
+with some additional features.
+
+## MSRV Policy
+
+*Please read this if migrating from `moveit`!*
+
+The MSRV of `moveit` is Rust 1.68. The MSRV policy for this fork is the most recent
+stable Rust version (in other words, there is no MSRV policy). The MSRV may be
+bumped as part of minor releases; it is not part of semver.
 
 ## How It Works
 
@@ -55,9 +66,9 @@ use std::pin::Pin;
 use std::ptr;
 use std::ptr::NonNull;
 
-use moveit::new;
-use moveit::new::New;
-use moveit::moveit;
+use moveit2::new;
+use moveit2::new::New;
+use moveit2::moveit;
 
 // This is a self-referential struct because the slice field points to the
 // data field. We cannot inform the compiler about that with a normal
@@ -126,5 +137,3 @@ For example, we could have placed the above in a `Box` by writing
 [`Pin` documentation]: https://doc.rust-lang.org/std/pin/index.html#drop-guarantee
 
 License: Apache-2.0
-
-This is not an officially supported Google product.

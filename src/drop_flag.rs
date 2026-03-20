@@ -114,7 +114,9 @@ impl DropFlag<'_> {
   #[allow(unused)]
   pub(crate) unsafe fn longer_lifetime<'a>(self) -> DropFlag<'a> {
     DropFlag {
-      counter: mem::transmute(self.counter),
+      counter: unsafe {
+        mem::transmute::<&'_ Cell<_>, &'a Cell<_>>(self.counter)
+      },
     }
   }
 }
@@ -155,7 +157,7 @@ impl<T> DroppingFlag<T> {
   ///
   /// This function is safe; the returned reference to the drop flag cannot be
   /// used to make a previously dropped value live again.
-  pub fn flag(slot: &Self) -> DropFlag {
+  pub fn flag(slot: &Self) -> DropFlag<'_> {
     DropFlag {
       counter: &slot.counter,
     }
@@ -167,7 +169,7 @@ impl<T> DroppingFlag<T> {
   /// This function is safe; the returned reference to the drop flag cannot be
   /// used to make a previously dropped value live again, since the value is
   /// not destroyed before the wrapper is.
-  pub fn as_parts(slot: &Self) -> (&T, DropFlag) {
+  pub fn as_parts(slot: &Self) -> (&T, DropFlag<'_>) {
     (
       &slot.value,
       DropFlag {
@@ -182,7 +184,7 @@ impl<T> DroppingFlag<T> {
   /// This function is safe; the returned reference to the drop flag cannot be
   /// used to make a previously dropped value live again, since the value is
   /// not destroyed before the wrapper is.
-  pub fn as_parts_mut(slot: &mut Self) -> (&mut T, DropFlag) {
+  pub fn as_parts_mut(slot: &mut Self) -> (&mut T, DropFlag<'_>) {
     (
       &mut slot.value,
       DropFlag {
@@ -253,7 +255,7 @@ impl TrappedFlag {
   }
 
   /// Returns a reference to the [`DropFlag`].
-  pub fn flag(&self) -> DropFlag {
+  pub fn flag(&self) -> DropFlag<'_> {
     DropFlag {
       counter: &self.counter,
     }
@@ -320,7 +322,7 @@ impl QuietFlag {
   }
 
   /// Returns a reference to the [`DropFlag`].
-  pub fn flag(&self) -> DropFlag {
+  pub fn flag(&self) -> DropFlag<'_> {
     DropFlag {
       counter: &self.counter,
     }

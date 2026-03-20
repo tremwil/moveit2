@@ -61,7 +61,7 @@ where
 /// `T`.
 ///
 /// ```
-/// # use moveit::{moveit, new};
+/// # use moveit2::{moveit, new};
 /// moveit! {
 ///   let x = new::by(|| 21 * 2);
 /// }
@@ -79,7 +79,7 @@ where
 ///
 /// ```
 /// # use std::pin::Pin;
-/// # use moveit::{moveit, new, MoveRef};
+/// # use moveit2::{moveit, new, MoveRef};
 /// moveit! {
 ///   let x: Pin<MoveRef<String>> = new::from("foo");
 /// }
@@ -94,7 +94,7 @@ pub fn from<T: From<U>, U>(val: U) -> impl New<Output = T> {
 ///
 /// ```
 /// # use std::pin::Pin;
-/// # use moveit::{moveit, new};
+/// # use moveit2::{moveit, new};
 /// moveit! {
 ///   let x = new::of(42);
 /// }
@@ -111,7 +111,7 @@ pub fn of<T>(val: T) -> impl New<Output = T> {
 ///
 /// ```
 /// # use std::pin::Pin;
-/// # use moveit::{moveit, new};
+/// # use moveit2::{moveit, new};
 /// moveit! {
 ///   let x = new::default::<i32>();
 /// }
