@@ -21,30 +21,30 @@
 
 template <typename T>
 auto delete_imp(T *ptr, int) -> decltype((void)T::operator delete(ptr)) {
-  T::operator delete(ptr);
+    T::operator delete(ptr);
 }
 
 template <typename T> void delete_imp(T *ptr, long) { ::operator delete(ptr); }
 
 template <typename T> void delete_appropriately(T *obj) {
-  // 0 is a better match for the first 'delete_imp' so will match
-  // preferentially.
-  delete_imp(obj, 0);
+    // 0 is a better match for the first 'delete_imp' so will match
+    // preferentially.
+    delete_imp(obj, 0);
 }
 
 template <typename T>
 auto new_imp(size_t count, int) -> decltype(T::operator new(count)) {
-  return T::operator new(count);
+    return T::operator new(count);
 }
 
 template <typename T> void *new_imp(size_t count, long) {
-  return ::operator new(count);
+    return ::operator new(count);
 }
 
 template <typename T> T *new_appropriately(size_t count) {
-  // 0 is a better match for the first 'delete_imp' so will match
-  // preferentially.
-  return static_cast<T *>(new_imp<T>(count, 0));
+    // 0 is a better match for the first 'delete_imp' so will match
+    // preferentially.
+    return static_cast<T *>(new_imp<T>(count, 0));
 }
 
 #endif

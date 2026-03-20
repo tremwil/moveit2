@@ -365,21 +365,21 @@ impl<P: DerefMove> AsMove for Pin<P> {
 /// # use moveit2::{DerefMove, MoveRef, moveit};
 /// fn move_out_of<P>(p: P) -> P::Target
 /// where
-///   P: DerefMove,
-///   P::Target: Sized,
+///     P: DerefMove,
+///     P::Target: Sized,
 /// {
-///   unsafe {
-///     // Replace `p` with a move reference into it.
-///     moveit!(let p = &move *p);
-///     
-///     // Move out of `p`. From this point on, the `P::Target` destructor must
-///     // run when, and only when, the function's return value goes out of
-///     // scope per the usual Rust rules.
-///     //
-///     // In particular, the original `p` or any pointer it came from must not
-///     // run the destructor when they go out of scope, under any circumstance.
-///     MoveRef::into_inner(p)
-///   }
+///     unsafe {
+///         // Replace `p` with a move reference into it.
+///         moveit!(let p = &move *p);
+///         
+///         // Move out of `p`. From this point on, the `P::Target` destructor must
+///         // run when, and only when, the function's return value goes out of
+///         // scope per the usual Rust rules.
+///         //
+///         // In particular, the original `p` or any pointer it came from must not
+///         // run the destructor when they go out of scope, under any circumstance.
+///         MoveRef::into_inner(p)
+///     }
 /// }
 /// ```
 ///
@@ -426,8 +426,8 @@ unsafe impl<'a, T: ?Sized> DerefMove for MoveRef<'a, T> {
 ///
 /// // Fails to compile because `MoveRef<PhantomPinned>: Deref<Target = PhantomPinned>` and `PhantomPinned: !Unpin`.
 /// moveit! {
-///   let mref0: Pin<MoveRef<PhantomPinned>> = moveit2::new::default::<PhantomPinned>();
-///   let mref1 = &move *mref0;
+///     let mref0: Pin<MoveRef<PhantomPinned>> = moveit2::new::default::<PhantomPinned>();
+///     let mref1 = &move *mref0;
 /// }
 unsafe impl<P> DerefMove for Pin<P>
 where
@@ -482,17 +482,17 @@ pub mod __macro {
 /// let bx = Box::new(42);
 ///
 /// moveit! {
-///   // Use a `New` to construct a new value in place on the stack. This
-///   // produces a value of type `Pin<MoveRef<_>>`.
-///   let x = new::default::<i32>();
-///   
-///   // Move out of an existing `DerefMove` type, such as a `Box`. This has
-///   // type `MoveRef<_>`, but can be pinned using `MoveRef::into_pin()`.
-///   let y = &move *bx;
-///   
-///   // Create a `MoveRef` of an existing type on the stack. This also has
-///   // type `MoveRef<_>`.
-///   let z = &move y;
+///     // Use a `New` to construct a new value in place on the stack. This
+///     // produces a value of type `Pin<MoveRef<_>>`.
+///     let x = new::default::<i32>();
+///     
+///     // Move out of an existing `DerefMove` type, such as a `Box`. This has
+///     // type `MoveRef<_>`, but can be pinned using `MoveRef::into_pin()`.
+///     let y = &move *bx;
+///     
+///     // Create a `MoveRef` of an existing type on the stack. This also has
+///     // type `MoveRef<_>`.
+///     let z = &move y;
 /// }
 /// ```
 ///
@@ -507,7 +507,7 @@ pub mod __macro {
 /// # use moveit2::{moveit, new, move_ref::MoveRef};
 /// # use core::pin::Pin;
 /// fn do_thing(x: Pin<MoveRef<i32>>) {
-///   // ...
+///     // ...
 /// # let _ = x;
 /// }
 ///
@@ -524,55 +524,55 @@ pub mod __macro {
 /// [`Box::emplace()`]: crate::new::Emplace::emplace
 #[macro_export]
 macro_rules! moveit {
-  (let $name:ident $(: $ty:ty)? = &move *$expr:expr $(; $($rest:tt)*)?) => {
-    $crate::moveit!(@move $name, $($ty)?, $expr);
-    $crate::moveit!($($($rest)*)?);
-  };
-  (let mut $name:ident $(: $ty:ty)? = &move *$expr:expr $(; $($rest:tt)*)?) => {
-    $crate::moveit!(@move(mut) $name, $($ty)?, $expr);
-    $crate::moveit!($($($rest)*)?);
-  };
-  (let $name:ident $(: $ty:ty)? = &move $expr:expr $(; $($rest:tt)*)?) => {
-    $crate::moveit!(@put $name, $($ty)?, $expr);
-    $crate::moveit!($($($rest)*)?);
-  };
-  (let mut $name:ident $(: $ty:ty)? = &move $expr:expr $(; $($rest:tt)*)?) => {
-    $crate::emplace!(@put(mut) $name, $($ty)?, $expr);
-    $crate::emplace!($($($rest)*)?);
-  };
-  (let $name:ident $(: $ty:ty)? = $expr:expr $(; $($rest:tt)*)?) => {
-    $crate::moveit!(@emplace $name, $($ty)?, $expr);
-    $crate::moveit!($($($rest)*)?);
-  };
-  (let mut $name:ident $(: $ty:ty)? = $expr:expr $(; $($rest:tt)*)?) => {
-    $crate::moveit!(@emplace(mut) $name, $($ty)?, $expr);
-    $crate::moveit!($($($rest)*)?);
-  };
-  ($(;)?) => {};
+    (let $name:ident $(: $ty:ty)? = &move *$expr:expr $(; $($rest:tt)*)?) => {
+        $crate::moveit!(@move $name, $($ty)?, $expr);
+        $crate::moveit!($($($rest)*)?);
+    };
+    (let mut $name:ident $(: $ty:ty)? = &move *$expr:expr $(; $($rest:tt)*)?) => {
+        $crate::moveit!(@move(mut) $name, $($ty)?, $expr);
+        $crate::moveit!($($($rest)*)?);
+    };
+    (let $name:ident $(: $ty:ty)? = &move $expr:expr $(; $($rest:tt)*)?) => {
+        $crate::moveit!(@put $name, $($ty)?, $expr);
+        $crate::moveit!($($($rest)*)?);
+    };
+    (let mut $name:ident $(: $ty:ty)? = &move $expr:expr $(; $($rest:tt)*)?) => {
+        $crate::emplace!(@put(mut) $name, $($ty)?, $expr);
+        $crate::emplace!($($($rest)*)?);
+    };
+    (let $name:ident $(: $ty:ty)? = $expr:expr $(; $($rest:tt)*)?) => {
+        $crate::moveit!(@emplace $name, $($ty)?, $expr);
+        $crate::moveit!($($($rest)*)?);
+    };
+    (let mut $name:ident $(: $ty:ty)? = $expr:expr $(; $($rest:tt)*)?) => {
+        $crate::moveit!(@emplace(mut) $name, $($ty)?, $expr);
+        $crate::moveit!($($($rest)*)?);
+    };
+    ($(;)?) => {};
 
-  (&move *$expr:expr) => {
-    $crate::move_ref::DerefMove::deref_move(
-      $expr, $crate::slot!(#[dropping]),
-    )
-  };
+    (&move *$expr:expr) => {
+        $crate::move_ref::DerefMove::deref_move(
+            $expr, $crate::slot!(#[dropping]),
+        )
+    };
 
-  (&move $expr:expr) => {$crate::slot!().put($expr)};
-  ($expr:expr) => {$crate::slot!().emplace($expr)};
+    (&move $expr:expr) => {$crate::slot!().put($expr)};
+    ($expr:expr) => {$crate::slot!().emplace($expr)};
 
-  (@move $(($mut:tt))? $name:ident, $($ty:ty)?, $expr:expr) => {
-    $crate::slot!(#[dropping] storage);
+    (@move $(($mut:tt))? $name:ident, $($ty:ty)?, $expr:expr) => {
+        $crate::slot!(#[dropping] storage);
 
-    #[allow(unused_mut)]
-    let $($mut)? $name $(: $ty)? = $crate::move_ref::DerefMove::deref_move($expr, storage);
-  };
-  (@put $(($mut:tt))? $name:ident, $($ty:ty)?, $expr:expr) => {
-    $crate::slot!(slot);
-    let $($mut)? $name $(: $ty)? = slot.put($expr);
-  };
-  (@emplace $(($mut:tt))? $name:ident, $($ty:ty)?, $expr:expr) => {
-    $crate::slot!(slot);
-    let $($mut)? $name $(: $ty)? = slot.emplace($expr);
-  };
+        #[allow(unused_mut)]
+        let $($mut)? $name $(: $ty)? = $crate::move_ref::DerefMove::deref_move($expr, storage);
+    };
+    (@put $(($mut:tt))? $name:ident, $($ty:ty)?, $expr:expr) => {
+        $crate::slot!(slot);
+        let $($mut)? $name $(: $ty)? = slot.put($expr);
+    };
+    (@emplace $(($mut:tt))? $name:ident, $($ty:ty)?, $expr:expr) => {
+        $crate::slot!(slot);
+        let $($mut)? $name $(: $ty)? = slot.emplace($expr);
+    };
 }
 
 #[cfg(test)]

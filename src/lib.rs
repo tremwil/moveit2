@@ -77,33 +77,33 @@
 //! // rules. Instead we use a raw pointer, though one which is known not to be
 //! // null, as we know it's pointing at the string.
 //! struct Unmovable {
-//!   data: String,
-//!   slice: NonNull<String>,
-//!   _pin: PhantomPinned,
+//!     data: String,
+//!     slice: NonNull<String>,
+//!     _pin: PhantomPinned,
 //! }
 //!
 //! impl Unmovable {
-//!   // Defer construction until the final location is known.
-//!   fn new(data: String) -> impl New<Output = Self> {
-//!     new::of(Unmovable {
-//!       data,
-//!       // We only create the pointer once the data is in place
-//!       // otherwise it will have already moved before we even started.
-//!       slice: NonNull::dangling(),
-//!       _pin: PhantomPinned,
-//!     }).with(|this| unsafe {
-//!       let this = this.get_unchecked_mut();
-//!       this.slice = NonNull::from(&this.data);
-//!     })
-//!     
-//!     // It is also possible to use other `new::` helpers, such as
-//!     // `new::by` and `new::by_raw`, to configure construction behavior.
-//!   }
+//!     // Defer construction until the final location is known.
+//!     fn new(data: String) -> impl New<Output = Self> {
+//!         new::of(Unmovable {
+//!             data,
+//!             // We only create the pointer once the data is in place
+//!             // otherwise it will have already moved before we even started.
+//!             slice: NonNull::dangling(),
+//!             _pin: PhantomPinned,
+//!         }).with(|this| unsafe {
+//!             let this = this.get_unchecked_mut();
+//!             this.slice = NonNull::from(&this.data);
+//!         })
+//!         
+//!         // It is also possible to use other `new::` helpers, such as
+//!         // `new::by` and `new::by_raw`, to configure construction behavior.
+//!     }
 //! }
 //!
 //! // The constructor can't be used directly, and needs to be emplaced.
 //! moveit! {
-//!   let unmoved = Unmovable::new("hello".to_string());
+//!     let unmoved = Unmovable::new("hello".to_string());
 //! }
 //! // The pointer should point to the correct location,
 //! // so long as the struct hasn't moved.

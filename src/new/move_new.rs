@@ -47,8 +47,8 @@ pub unsafe trait MoveNew: Sized {
 /// # use moveit2::{MoveRef, moveit, new};
 /// let foo = Box::new(42);
 /// moveit! {
-///   let bar = &move foo;
-///   let baz = new::mov(bar);
+///     let bar = &move foo;
+///     let baz = new::mov(bar);
 /// }
 /// ```
 #[inline]

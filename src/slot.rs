@@ -35,10 +35,10 @@
 //! ```
 //! # use moveit2::{slot, Slot, move_ref::MoveRef};
 //! fn returns_on_the_stack(val: i32, storage: Slot<i32>) -> Option<MoveRef<i32>> {
-//!   if val == 0 {
-//!     return None
-//!   }
-//!   Some(storage.put(val))
+//!     if val == 0 {
+//!         return None
+//!     }
+//!     Some(storage.put(val))
 //! }
 //!
 //! slot!(storage);
@@ -361,31 +361,31 @@ pub mod __macro {
 /// ```
 #[macro_export]
 macro_rules! slot {
-  () => {
-    $crate::slot::__macro::new_unchecked_hygine_hack(
-      &mut $crate::slot::__macro::core::mem::MaybeUninit::uninit(),
-      $crate::drop_flag::TrappedFlag::new().flag(),
-    )
-  };
-  (#[dropping]) => {
-    $crate::slot::__macro::SlotDropper::new().new_unchecked_hygine_hack()
-  };
-  ($($name:ident $(: $ty:ty)?),* $(,)*) => {$(
-    let mut uninit = $crate::slot::__macro::core::mem::MaybeUninit::<
-      $crate::slot!(@tyof $($ty)?)
-    >::uninit();let trap = $crate::drop_flag::TrappedFlag::new();
-    let $name = $crate::slot::__macro::new_unchecked_hygine_hack(
-      &mut uninit,
-      trap.flag()
-    );
-  )*};
-  (#[dropping] $($name:ident $(: $ty:ty)?),* $(,)*) => {$(
-    let mut uninit = $crate::slot::__macro::SlotDropper::<
-      $crate::slot!(@tyof $($ty)?)
-    >::new();
-    #[allow(unsafe_code, unused_unsafe)]
-    let $name = uninit.new_unchecked_hygine_hack();
-  )*};
-  (@tyof) => {_};
-  (@tyof $ty:ty) => {$ty};
+    () => {
+        $crate::slot::__macro::new_unchecked_hygine_hack(
+            &mut $crate::slot::__macro::core::mem::MaybeUninit::uninit(),
+            $crate::drop_flag::TrappedFlag::new().flag(),
+        )
+    };
+    (#[dropping]) => {
+        $crate::slot::__macro::SlotDropper::new().new_unchecked_hygine_hack()
+    };
+    ($($name:ident $(: $ty:ty)?),* $(,)*) => {$(
+        let mut uninit = $crate::slot::__macro::core::mem::MaybeUninit::<
+            $crate::slot!(@tyof $($ty)?)
+        >::uninit();let trap = $crate::drop_flag::TrappedFlag::new();
+        let $name = $crate::slot::__macro::new_unchecked_hygine_hack(
+            &mut uninit,
+            trap.flag()
+        );
+    )*};
+    (#[dropping] $($name:ident $(: $ty:ty)?),* $(,)*) => {$(
+        let mut uninit = $crate::slot::__macro::SlotDropper::<
+            $crate::slot!(@tyof $($ty)?)
+        >::new();
+        #[allow(unsafe_code, unused_unsafe)]
+        let $name = uninit.new_unchecked_hygine_hack();
+    )*};
+    (@tyof) => {_};
+    (@tyof $ty:ty) => {$ty};
 }

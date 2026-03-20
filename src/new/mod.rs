@@ -74,9 +74,9 @@ pub unsafe trait New: Sized {
     /// pub struct MyType { /* ... */ }
     ///
     /// impl MyType {
-    ///   pub fn new() -> impl New<Output = Self> {
-    ///     new::of(MyType { /* ... */ }).with(|this| {
-    ///       // Address-sensitive setup can occur here.
+    ///     pub fn new() -> impl New<Output = Self> {
+    ///         new::of(MyType { /* ... */ }).with(|this| {
+    ///         // Address-sensitive setup can occur here.
     ///     })
     ///   }
     /// }
