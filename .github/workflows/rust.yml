@@ -27,7 +27,7 @@ jobs:
   lints:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v6
 
     - name: cargo fmt
       run: cargo fmt -- --check --files-with-diff
@@ -37,7 +37,7 @@ jobs:
   tests:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v6
 
     - name: cargo test
       run: cargo test --verbose --all
@@ -47,9 +47,9 @@ jobs:
   miri:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v6
 
     - name: rustup component add miri
-      run: rustup +nightly-2021-10-10 component add miri
+      run: rustup +nightly component add miri
     - name: cargo miri test
-      run: cargo +nightly-2021-10-10 miri test --verbose
+      run: cargo +nightly miri test --verbose
