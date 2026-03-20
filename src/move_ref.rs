@@ -577,13 +577,16 @@ macro_rules! moveit {
 
 #[cfg(test)]
 pub(crate) mod test {
+  use std::boxed::Box;
+
   use crate::MoveNew;
   use crate::New;
   use crate::new;
 
+  #[cfg(feature = "alloc")]
+  use alloc::{Layout, alloc};
+
   use super::*;
-  use std::alloc;
-  use std::alloc::Layout;
   use std::marker::PhantomPinned;
   use std::mem::MaybeUninit;
 
@@ -597,6 +600,7 @@ pub(crate) mod test {
   }
 
   #[test]
+  #[cfg(feature = "alloc")]
   fn deref_move_of_box() {
     let x = Box::new(5);
     moveit!(let y: MoveRef<i32> = &move *x);
@@ -623,6 +627,7 @@ pub(crate) mod test {
   }
 
   #[test]
+  #[cfg(feature = "alloc")]
   fn forgettable_box() {
     let mut x = Box::new(5);
 
@@ -642,6 +647,7 @@ pub(crate) mod test {
   }
 
   #[test]
+  #[cfg(feature = "alloc")]
   fn forgettable_box_temporary() {
     let mut x = Box::new(5);
 

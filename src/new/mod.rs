@@ -26,6 +26,7 @@ use core::pin::Pin;
 #[cfg(doc)]
 use {crate::new, core::ops::DerefMut};
 
+#[cfg(feature = "alloc")]
 use alloc::{boxed::Box, rc::Rc, sync::Arc};
 
 mod copy_new;
@@ -170,53 +171,58 @@ pub trait Emplace<T>: Sized + Deref {
   -> Result<Self::Output, N::Error>;
 }
 
-impl<T> Emplace<T> for Box<T> {
-  type Output = Pin<Self>;
+#[cfg(feature = "alloc")]
+mod alloc_support {
+  use super::*;
 
-  fn try_emplace<N: TryNew<Output = T>>(
-    n: N,
-  ) -> Result<Self::Output, N::Error> {
-    let mut uninit = Box::new(MaybeUninit::<T>::uninit());
-    unsafe {
-      let pinned = Pin::new_unchecked(&mut *uninit);
-      n.try_new(pinned)?;
-      Ok(Pin::new_unchecked(Box::from_raw(
-        Box::into_raw(uninit).cast::<T>(),
-      )))
+  impl<T> Emplace<T> for Box<T> {
+    type Output = Pin<Self>;
+
+    fn try_emplace<N: TryNew<Output = T>>(
+      n: N,
+    ) -> Result<Self::Output, N::Error> {
+      let mut uninit = Box::new(MaybeUninit::<T>::uninit());
+      unsafe {
+        let pinned = Pin::new_unchecked(&mut *uninit);
+        n.try_new(pinned)?;
+        Ok(Pin::new_unchecked(Box::from_raw(
+          Box::into_raw(uninit).cast::<T>(),
+        )))
+      }
     }
   }
-}
 
-impl<T> Emplace<T> for Rc<T> {
-  type Output = Pin<Self>;
+  impl<T> Emplace<T> for Rc<T> {
+    type Output = Pin<Self>;
 
-  fn try_emplace<N: TryNew<Output = T>>(
-    n: N,
-  ) -> Result<Self::Output, N::Error> {
-    let uninit = Rc::new(MaybeUninit::<T>::uninit());
-    unsafe {
-      let pinned = Pin::new_unchecked(&mut *(Rc::as_ptr(&uninit) as *mut _));
-      n.try_new(pinned)?;
-      Ok(Pin::new_unchecked(Rc::from_raw(
-        Rc::into_raw(uninit).cast::<T>(),
-      )))
+    fn try_emplace<N: TryNew<Output = T>>(
+      n: N,
+    ) -> Result<Self::Output, N::Error> {
+      let uninit = Rc::new(MaybeUninit::<T>::uninit());
+      unsafe {
+        let pinned = Pin::new_unchecked(&mut *(Rc::as_ptr(&uninit) as *mut _));
+        n.try_new(pinned)?;
+        Ok(Pin::new_unchecked(Rc::from_raw(
+          Rc::into_raw(uninit).cast::<T>(),
+        )))
+      }
     }
   }
-}
 
-impl<T> Emplace<T> for Arc<T> {
-  type Output = Pin<Self>;
+  impl<T> Emplace<T> for Arc<T> {
+    type Output = Pin<Self>;
 
-  fn try_emplace<N: TryNew<Output = T>>(
-    n: N,
-  ) -> Result<Self::Output, N::Error> {
-    let uninit = Arc::new(MaybeUninit::<T>::uninit());
-    unsafe {
-      let pinned = Pin::new_unchecked(&mut *(Arc::as_ptr(&uninit) as *mut _));
-      n.try_new(pinned)?;
-      Ok(Pin::new_unchecked(Arc::from_raw(
-        Arc::into_raw(uninit).cast::<T>(),
-      )))
+    fn try_emplace<N: TryNew<Output = T>>(
+      n: N,
+    ) -> Result<Self::Output, N::Error> {
+      let uninit = Arc::new(MaybeUninit::<T>::uninit());
+      unsafe {
+        let pinned = Pin::new_unchecked(&mut *(Arc::as_ptr(&uninit) as *mut _));
+        n.try_new(pinned)?;
+        Ok(Pin::new_unchecked(Arc::from_raw(
+          Arc::into_raw(uninit).cast::<T>(),
+        )))
+      }
     }
   }
 }

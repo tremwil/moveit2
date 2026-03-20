@@ -138,13 +138,16 @@
 //!
 //! [`Pin` documentation]: https://doc.rust-lang.org/std/pin/index.html#drop-guarantee
 
-#![cfg_attr(not(any(test, feature = "cxx")), no_std)]
+#![no_std]
 #![deny(warnings, missing_docs, unused)]
 // These clippy lints are somewhat at odds with our use of `new()`.
 #![allow(clippy::new_ret_no_self, clippy::wrong_self_convention)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
+
+#[cfg(feature = "cxx")]
+extern crate std;
 
 #[cfg(feature = "alloc")]
 mod alloc_support;

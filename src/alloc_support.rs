@@ -57,14 +57,14 @@ unsafe impl<T> DerefMove for Box<T> {
 
 #[cfg(test)]
 mod tests {
+  use crate::Emplace;
   use crate::move_ref::test::Immovable;
   use crate::moveit;
   use crate::new::mov;
-  use crate::Emplace;
 
   #[test]
   fn test_mov_box() {
-    let foo = Box::emplace(Immovable::new());
+    let foo = alloc::boxed::Box::emplace(Immovable::new());
     moveit!(let _foo = mov(foo));
   }
 }
