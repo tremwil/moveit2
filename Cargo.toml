@@ -33,3 +33,7 @@ optional = true
 
 [workspace]
 members = ["cxx-tests"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

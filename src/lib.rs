@@ -14,9 +14,12 @@
 
 //! A library for safe, in-place construction of Rust (and C++!) objects.
 //!
+//! This crate is a maintained fork of `moveit`, as the original crate has been
+//! archived for a few years now.
+//!
 //! # How It Works
 //!
-//! `moveit` revolves around `unsafe trait`s that impose additional guarantees
+//! `moveit2` revolves around `unsafe trait`s that impose additional guarantees
 //! on `!Unpin` types, such that they can be moved in the C++ sense. There are
 //! two senses of "move" frequently used:
 //! - The Rust sense, which is a blind memcpy and analogous-ish to the
@@ -140,6 +143,7 @@
 
 #![no_std]
 #![deny(warnings, missing_docs, unused)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 // These clippy lints are somewhat at odds with our use of `new()`.
 #![allow(clippy::new_ret_no_self, clippy::wrong_self_convention)]
 

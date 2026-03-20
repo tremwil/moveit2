@@ -354,7 +354,7 @@ impl<P: DerefMove> AsMove for Pin<P> {
 /// We don't need to inhibit any destructors: we just need to convert a
 /// `MoveRef<MoveRef<T>>` into a `MoveRef<T>`, which we can do by using
 /// [`MoveRef::into_inner()`]. [`AsMove::Storage`] can be whatever, so we
-/// simply choose [`()`] for this; the choice is arbitrary.
+/// simply choose `()` for this; the choice is arbitrary.
 ///
 /// # Safety
 ///
