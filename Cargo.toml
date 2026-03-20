@@ -22,6 +22,7 @@ keywords = ["ffi", "no_std", "macros", "lifetime", "ownership"]
 readme = "README.crates-io.md"
 license = "Apache-2.0 OR MIT"
 description = "A library for safe, in-place construction of Rust (and C++!) objects."
+exclude = [".github/*", ".cargo/*"]
 
 [features]
 alloc = []
