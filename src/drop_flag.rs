@@ -61,9 +61,9 @@ use core::ops::DerefMut;
 
 #[cfg(doc)]
 use {
-  crate::move_ref::{AsMove, DerefMove, MoveRef},
-  alloc::boxed::Box,
-  core::pin::Pin,
+    crate::move_ref::{AsMove, DerefMove, MoveRef},
+    alloc::boxed::Box,
+    core::pin::Pin,
 };
 
 /// A drop flag, for tracking successful destruction.
@@ -78,47 +78,45 @@ use {
 /// See the [module documentation][self] for more information.
 #[derive(Clone, Copy)]
 pub struct DropFlag<'frame> {
-  counter: &'frame Cell<usize>,
+    counter: &'frame Cell<usize>,
 }
 
 impl DropFlag<'_> {
-  /// Increments the internal counter.
-  ///
-  /// This function does not provide any overflow protection; `unsafe` code is
-  /// responsible for making sure that cannot happen.
-  #[inline]
-  pub fn inc(self) {
-    self.counter.set(self.counter.get() + 1)
-  }
-
-  /// Decrements the internal counter and returns true if it became zero.
-  ///
-  /// This function will return `false` if the counter was already zero.
-  #[inline]
-  pub fn dec_and_check_if_died(self) -> bool {
-    if self.counter.get() == 0 {
-      return false;
+    /// Increments the internal counter.
+    ///
+    /// This function does not provide any overflow protection; `unsafe` code is
+    /// responsible for making sure that cannot happen.
+    #[inline]
+    pub fn inc(self) {
+        self.counter.set(self.counter.get() + 1)
     }
-    self.counter.set(self.counter.get() - 1);
-    self.is_dead()
-  }
 
-  /// Returns whether the internal counter is zero.
-  #[inline]
-  pub fn is_dead(self) -> bool {
-    self.counter.get() == 0
-  }
-
-  /// Lengthens the lifetime of `self`.
-  #[inline]
-  #[allow(unused)]
-  pub(crate) unsafe fn longer_lifetime<'a>(self) -> DropFlag<'a> {
-    DropFlag {
-      counter: unsafe {
-        mem::transmute::<&'_ Cell<_>, &'a Cell<_>>(self.counter)
-      },
+    /// Decrements the internal counter and returns true if it became zero.
+    ///
+    /// This function will return `false` if the counter was already zero.
+    #[inline]
+    pub fn dec_and_check_if_died(self) -> bool {
+        if self.counter.get() == 0 {
+            return false;
+        }
+        self.counter.set(self.counter.get() - 1);
+        self.is_dead()
     }
-  }
+
+    /// Returns whether the internal counter is zero.
+    #[inline]
+    pub fn is_dead(self) -> bool {
+        self.counter.get() == 0
+    }
+
+    /// Lengthens the lifetime of `self`.
+    #[inline]
+    #[allow(unused)]
+    pub(crate) unsafe fn longer_lifetime<'a>(self) -> DropFlag<'a> {
+        DropFlag {
+            counter: unsafe { mem::transmute::<&'_ Cell<_>, &'a Cell<_>>(self.counter) },
+        }
+    }
 }
 
 /// A wrapper for managing when a value gets dropped via a [`DropFlag`].
@@ -138,85 +136,85 @@ impl DropFlag<'_> {
 /// should be leaked if the inner type was somehow not destroyed, such as in
 /// the case of heap-allocated storage like [`Box<T>`].
 pub struct DroppingFlag<T> {
-  value: ManuallyDrop<T>,
-  counter: Cell<usize>,
+    value: ManuallyDrop<T>,
+    counter: Cell<usize>,
 }
 
 impl<T> DroppingFlag<T> {
-  /// Wraps a new value to have its drop state managed by a `DropFlag`.
-  ///
-  /// The drop flag will start out dead and needs to be manually incremented.
-  pub fn new(value: T) -> Self {
-    Self {
-      value: ManuallyDrop::new(value),
-      counter: Cell::new(0),
+    /// Wraps a new value to have its drop state managed by a `DropFlag`.
+    ///
+    /// The drop flag will start out dead and needs to be manually incremented.
+    pub fn new(value: T) -> Self {
+        Self {
+            value: ManuallyDrop::new(value),
+            counter: Cell::new(0),
+        }
     }
-  }
 
-  /// Gets a reference to the drop flag.
-  ///
-  /// This function is safe; the returned reference to the drop flag cannot be
-  /// used to make a previously dropped value live again.
-  pub fn flag(slot: &Self) -> DropFlag<'_> {
-    DropFlag {
-      counter: &slot.counter,
+    /// Gets a reference to the drop flag.
+    ///
+    /// This function is safe; the returned reference to the drop flag cannot be
+    /// used to make a previously dropped value live again.
+    pub fn flag(slot: &Self) -> DropFlag<'_> {
+        DropFlag {
+            counter: &slot.counter,
+        }
     }
-  }
 
-  /// Splits this slot into a reference to the wrapped value plus a reference to
-  /// the drop flag.
-  ///
-  /// This function is safe; the returned reference to the drop flag cannot be
-  /// used to make a previously dropped value live again, since the value is
-  /// not destroyed before the wrapper is.
-  pub fn as_parts(slot: &Self) -> (&T, DropFlag<'_>) {
-    (
-      &slot.value,
-      DropFlag {
-        counter: &slot.counter,
-      },
-    )
-  }
+    /// Splits this slot into a reference to the wrapped value plus a reference to
+    /// the drop flag.
+    ///
+    /// This function is safe; the returned reference to the drop flag cannot be
+    /// used to make a previously dropped value live again, since the value is
+    /// not destroyed before the wrapper is.
+    pub fn as_parts(slot: &Self) -> (&T, DropFlag<'_>) {
+        (
+            &slot.value,
+            DropFlag {
+                counter: &slot.counter,
+            },
+        )
+    }
 
-  /// Splits this slot into a reference to the wrapped value plus a reference to
-  /// the drop flag.
-  ///
-  /// This function is safe; the returned reference to the drop flag cannot be
-  /// used to make a previously dropped value live again, since the value is
-  /// not destroyed before the wrapper is.
-  pub fn as_parts_mut(slot: &mut Self) -> (&mut T, DropFlag<'_>) {
-    (
-      &mut slot.value,
-      DropFlag {
-        counter: &slot.counter,
-      },
-    )
-  }
+    /// Splits this slot into a reference to the wrapped value plus a reference to
+    /// the drop flag.
+    ///
+    /// This function is safe; the returned reference to the drop flag cannot be
+    /// used to make a previously dropped value live again, since the value is
+    /// not destroyed before the wrapper is.
+    pub fn as_parts_mut(slot: &mut Self) -> (&mut T, DropFlag<'_>) {
+        (
+            &mut slot.value,
+            DropFlag {
+                counter: &slot.counter,
+            },
+        )
+    }
 }
 
 impl<T> Deref for DroppingFlag<T> {
-  type Target = T;
-  #[inline]
-  fn deref(&self) -> &T {
-    &self.value
-  }
+    type Target = T;
+    #[inline]
+    fn deref(&self) -> &T {
+        &self.value
+    }
 }
 
 impl<T> DerefMut for DroppingFlag<T> {
-  #[inline]
-  fn deref_mut(&mut self) -> &mut T {
-    &mut self.value
-  }
+    #[inline]
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.value
+    }
 }
 
 impl<T> Drop for DroppingFlag<T> {
-  fn drop(&mut self) {
-    if Self::flag(self).is_dead() {
-      unsafe {
-        ManuallyDrop::drop(&mut self.value);
-      }
+    fn drop(&mut self) {
+        if Self::flag(self).is_dead() {
+            unsafe {
+                ManuallyDrop::drop(&mut self.value);
+            }
+        }
     }
-  }
 }
 
 /// An RAII trap that ensures a drop flag is correctly cleared.
@@ -227,81 +225,81 @@ impl<T> Drop for DroppingFlag<T> {
 ///
 /// This type is useful for safely constructing [`MoveRef`]s.
 pub struct TrappedFlag {
-  counter: Cell<usize>,
+    counter: Cell<usize>,
 
-  // In debug mode, we capture the location the trap is created at, to help
-  // connect an eventual failure to the matching storage.
-  #[cfg(debug_assertions)]
-  location: &'static core::panic::Location<'static>,
+    // In debug mode, we capture the location the trap is created at, to help
+    // connect an eventual failure to the matching storage.
+    #[cfg(debug_assertions)]
+    location: &'static core::panic::Location<'static>,
 }
 
 impl TrappedFlag {
-  /// Creates a new trap with a dead flag.
-  #[cfg(debug_assertions)]
-  #[track_caller]
-  pub fn new() -> Self {
-    Self {
-      counter: Cell::new(0),
-      location: core::panic::Location::caller(),
-    }
-  }
-
-  /// Creates a new trap with a dead flag.
-  #[cfg(not(debug_assertions))]
-  pub fn new() -> Self {
-    Self {
-      counter: Cell::new(0),
-    }
-  }
-
-  /// Returns a reference to the [`DropFlag`].
-  pub fn flag(&self) -> DropFlag<'_> {
-    DropFlag {
-      counter: &self.counter,
-    }
-  }
-
-  /// Preemptively checks that this flag has been cleared.
-  ///
-  /// Aborts (rather than panicking!) if the assertion fails.
-  pub fn assert_cleared(&self) {
-    if self.flag().is_dead() {
-      return;
-    }
-
-    // We can force an abort by triggering a panic mid-unwind.
-    // This is the only way to force an LLVM abort from inside of `core`.
-    struct DoublePanic;
-    impl Drop for DoublePanic {
-      fn drop(&mut self) {
-        // In tests, we don't double-panic so that we can observe the
-        // failure correctly.
-        if cfg!(not(test)) {
-          panic!()
-        }
-      }
-    }
-
-    let _dp = DoublePanic;
-
+    /// Creates a new trap with a dead flag.
     #[cfg(debug_assertions)]
-    panic!("a critical drop flag at {} was not cleared!", self.location);
+    #[track_caller]
+    pub fn new() -> Self {
+        Self {
+            counter: Cell::new(0),
+            location: core::panic::Location::caller(),
+        }
+    }
 
+    /// Creates a new trap with a dead flag.
     #[cfg(not(debug_assertions))]
-    panic!("a critical drop flag was not cleared!");
-  }
+    pub fn new() -> Self {
+        Self {
+            counter: Cell::new(0),
+        }
+    }
+
+    /// Returns a reference to the [`DropFlag`].
+    pub fn flag(&self) -> DropFlag<'_> {
+        DropFlag {
+            counter: &self.counter,
+        }
+    }
+
+    /// Preemptively checks that this flag has been cleared.
+    ///
+    /// Aborts (rather than panicking!) if the assertion fails.
+    pub fn assert_cleared(&self) {
+        if self.flag().is_dead() {
+            return;
+        }
+
+        // We can force an abort by triggering a panic mid-unwind.
+        // This is the only way to force an LLVM abort from inside of `core`.
+        struct DoublePanic;
+        impl Drop for DoublePanic {
+            fn drop(&mut self) {
+                // In tests, we don't double-panic so that we can observe the
+                // failure correctly.
+                if cfg!(not(test)) {
+                    panic!()
+                }
+            }
+        }
+
+        let _dp = DoublePanic;
+
+        #[cfg(debug_assertions)]
+        panic!("a critical drop flag at {} was not cleared!", self.location);
+
+        #[cfg(not(debug_assertions))]
+        panic!("a critical drop flag was not cleared!");
+    }
 }
 
 impl Default for TrappedFlag {
-  fn default() -> Self {
-    Self::new()
-  }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Drop for TrappedFlag {
-  fn drop(&mut self) {
-    self.assert_cleared();
-  }
+    fn drop(&mut self) {
+        self.assert_cleared();
+    }
 }
 
 /// A [`DropFlag`] source that doesn't do anything with it.
@@ -310,27 +308,27 @@ impl Drop for TrappedFlag {
 /// if used incorrectly. This type is generally only useful when some separate
 /// mechanism is ensuring that invariants are not violated.
 pub struct QuietFlag {
-  counter: Cell<usize>,
+    counter: Cell<usize>,
 }
 
 impl QuietFlag {
-  /// Creates a new dead flag.
-  pub fn new() -> Self {
-    Self {
-      counter: Cell::new(0),
+    /// Creates a new dead flag.
+    pub fn new() -> Self {
+        Self {
+            counter: Cell::new(0),
+        }
     }
-  }
 
-  /// Returns a reference to the [`DropFlag`].
-  pub fn flag(&self) -> DropFlag<'_> {
-    DropFlag {
-      counter: &self.counter,
+    /// Returns a reference to the [`DropFlag`].
+    pub fn flag(&self) -> DropFlag<'_> {
+        DropFlag {
+            counter: &self.counter,
+        }
     }
-  }
 }
 
 impl Default for QuietFlag {
-  fn default() -> Self {
-    Self::new()
-  }
+    fn default() -> Self {
+        Self::new()
+    }
 }

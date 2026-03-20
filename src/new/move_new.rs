@@ -30,18 +30,15 @@ use crate::slot;
 /// - `src` should be treated as having been destroyed.
 /// - `this` must have been initialized.
 pub unsafe trait MoveNew: Sized {
-  /// Move-construct `src` into `this`, effectively re-pinning it at a new
-  /// location.
-  ///
-  /// # Safety
-  ///
-  /// The same safety requirements of [`New::new()`] apply, but, in addition,
-  /// `*src` must not be used after this function is called, because it has
-  /// effectively been destroyed.
-  unsafe fn move_new(
-    src: Pin<MoveRef<Self>>,
-    this: Pin<&mut MaybeUninit<Self>>,
-  );
+    /// Move-construct `src` into `this`, effectively re-pinning it at a new
+    /// location.
+    ///
+    /// # Safety
+    ///
+    /// The same safety requirements of [`New::new()`] apply, but, in addition,
+    /// `*src` must not be used after this function is called, because it has
+    /// effectively been destroyed.
+    unsafe fn move_new(src: Pin<MoveRef<Self>>, this: Pin<&mut MaybeUninit<Self>>);
 }
 
 /// Returns a [`New`] that forwards to [`MoveNew`].
@@ -57,12 +54,12 @@ pub unsafe trait MoveNew: Sized {
 #[inline]
 pub fn mov<P>(ptr: P) -> impl New<Output = P::Target>
 where
-  P: AsMove,
-  P::Target: MoveNew,
+    P: AsMove,
+    P::Target: MoveNew,
 {
-  unsafe {
-    new::by_raw(move |this| {
-      MoveNew::move_new(ptr.as_move(slot!(#[dropping])), this);
-    })
-  }
+    unsafe {
+        new::by_raw(move |this| {
+            MoveNew::move_new(ptr.as_move(slot!(#[dropping])), this);
+        })
+    }
 }

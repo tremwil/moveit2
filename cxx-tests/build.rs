@@ -13,13 +13,13 @@
 // limitations under the License.
 
 fn main() {
-  cxx_build::bridge("src/tests.rs")
-    .flag_if_supported("-std=c++14")
-    .include("src")
-    .file("src/cxx_support_test_cpp.cc")
-    .compile("moveit-cxx-tests");
+    cxx_build::bridge("src/tests.rs")
+        .flag_if_supported("-std=c++14")
+        .include("src")
+        .file("src/cxx_support_test_cpp.cc")
+        .compile("moveit-cxx-tests");
 
-  println!("cargo:rerun-if-changed=src/tests.rs");
-  println!("cargo:rerun-if-changed=src/cxx_support_test_cpp.h");
-  println!("cargo:rerun-if-changed=src/new_helpers.h");
+    println!("cargo:rerun-if-changed=src/tests.rs");
+    println!("cargo:rerun-if-changed=src/cxx_support_test_cpp.h");
+    println!("cargo:rerun-if-changed=src/new_helpers.h");
 }

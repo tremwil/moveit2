@@ -24,159 +24,159 @@ use moveit2::moveit;
 
 #[cxx::bridge]
 mod ffi {
-  #[derive(Debug)]
-  enum Status {
-    Unallocated,
-    Allocated,
-    Initialized,
-    Destructed,
-    Deallocated,
-    DeallocatedUninitialized,
-  }
+    #[derive(Debug)]
+    enum Status {
+        Unallocated,
+        Allocated,
+        Initialized,
+        Destructed,
+        Deallocated,
+        DeallocatedUninitialized,
+    }
 
-  unsafe extern "C++" {
-    include!("cxx_support_test_cpp.h");
-    type Foo = super::bindgenish::Foo;
-    fn foo_create_uninitialized() -> *mut Foo;
-    unsafe fn foo_free_uninitialized(ptr: *mut Foo);
-    unsafe fn foo_constructor(_this: *mut Foo);
-    unsafe fn foo_destructor(_this: *mut Foo);
-    unsafe fn foo_move(_this: *mut Foo, src: *mut Foo);
+    unsafe extern "C++" {
+        include!("cxx_support_test_cpp.h");
+        type Foo = super::bindgenish::Foo;
+        fn foo_create_uninitialized() -> *mut Foo;
+        unsafe fn foo_free_uninitialized(ptr: *mut Foo);
+        unsafe fn foo_constructor(_this: *mut Foo);
+        unsafe fn foo_destructor(_this: *mut Foo);
+        unsafe fn foo_move(_this: *mut Foo, src: *mut Foo);
 
-    type Bar = super::bindgenish::Bar;
-    fn bar_create_uninitialized() -> *mut Bar;
-    unsafe fn bar_free_uninitialized(ptr: *mut Bar);
-    unsafe fn bar_constructor(_this: *mut Bar);
-    unsafe fn bar_destructor(_this: *mut Bar);
-    unsafe fn bar_move(_this: *mut Bar, src: *mut Bar);
+        type Bar = super::bindgenish::Bar;
+        fn bar_create_uninitialized() -> *mut Bar;
+        unsafe fn bar_free_uninitialized(ptr: *mut Bar);
+        unsafe fn bar_constructor(_this: *mut Bar);
+        unsafe fn bar_destructor(_this: *mut Bar);
+        unsafe fn bar_move(_this: *mut Bar, src: *mut Bar);
 
-    fn GetA(self: &Foo) -> bool;
-    fn Modify(self: Pin<&mut Foo>);
+        fn GetA(self: &Foo) -> bool;
+        fn Modify(self: Pin<&mut Foo>);
 
-    fn ResetStatus();
-    fn GetStatus() -> Status;
-  }
-  // Ensures that cxx creates bindings for UniquePtr<Foo>
-  // even though that isn't used in any of the above APIs.
-  impl UniquePtr<Foo> {}
-  impl UniquePtr<Bar> {}
+        fn ResetStatus();
+        fn GetStatus() -> Status;
+    }
+    // Ensures that cxx creates bindings for UniquePtr<Foo>
+    // even though that isn't used in any of the above APIs.
+    impl UniquePtr<Foo> {}
+    impl UniquePtr<Bar> {}
 }
 
 mod bindgenish {
-  use std::marker::PhantomData;
-  use std::marker::PhantomPinned;
-  use std::mem::MaybeUninit;
-  use std::pin::Pin;
+    use std::marker::PhantomData;
+    use std::marker::PhantomPinned;
+    use std::mem::MaybeUninit;
+    use std::pin::Pin;
 
-  use cxx::ExternType;
-  use cxx::kind::Opaque;
-  use cxx::type_id;
+    use cxx::ExternType;
+    use cxx::kind::Opaque;
+    use cxx::type_id;
 
-  use moveit2::MakeCppStorage;
-  use moveit2::MoveNew;
-  use moveit2::New;
+    use moveit2::MakeCppStorage;
+    use moveit2::MoveNew;
+    use moveit2::New;
 
-  #[repr(C)]
-  pub struct Foo {
-    // opaque
-    _pin: PhantomData<PhantomPinned>,
-    _data: [u32; 4],
-  }
-
-  unsafe impl ExternType for Foo {
-    type Id = type_id!("Foo");
-    type Kind = Opaque;
-  }
-
-  unsafe impl MakeCppStorage for Foo {
-    unsafe fn allocate_uninitialized_cpp_storage() -> *mut Self {
-      super::ffi::foo_create_uninitialized()
+    #[repr(C)]
+    pub struct Foo {
+        // opaque
+        _pin: PhantomData<PhantomPinned>,
+        _data: [u32; 4],
     }
 
-    unsafe fn free_uninitialized_cpp_storage(ptr: *mut Self) {
-      super::ffi::foo_free_uninitialized(ptr);
-    }
-  }
-
-  impl Foo {
-    pub fn new() -> impl New<Output = Self> {
-      unsafe {
-        moveit2::new::by_raw(|space| {
-          let space = Pin::into_inner_unchecked(space).as_mut_ptr();
-          super::ffi::foo_constructor(space)
-        })
-      }
-    }
-  }
-
-  unsafe impl MoveNew for Foo {
-    unsafe fn move_new(
-      mut src: Pin<moveit2::MoveRef<Self>>,
-      this: Pin<&mut MaybeUninit<Self>>,
-    ) {
-      let src: &mut _ = Pin::into_inner_unchecked(src.as_mut());
-      let this = Pin::into_inner_unchecked(this).as_mut_ptr();
-      super::ffi::foo_move(this, src);
-      super::ffi::foo_destructor(src);
-    }
-  }
-
-  impl Drop for Foo {
-    fn drop(&mut self) {
-      unsafe { super::ffi::foo_destructor(self) };
-    }
-  }
-
-  #[repr(C)]
-  pub struct Bar {
-    // opaque
-    _pin: PhantomData<PhantomPinned>,
-    _data: [u32; 4],
-  }
-
-  unsafe impl ExternType for Bar {
-    type Id = type_id!("Bar");
-    type Kind = Opaque;
-  }
-
-  unsafe impl MakeCppStorage for Bar {
-    unsafe fn allocate_uninitialized_cpp_storage() -> *mut Self {
-      super::ffi::bar_create_uninitialized()
+    unsafe impl ExternType for Foo {
+        type Id = type_id!("Foo");
+        type Kind = Opaque;
     }
 
-    unsafe fn free_uninitialized_cpp_storage(ptr: *mut Self) {
-      super::ffi::bar_free_uninitialized(ptr);
-    }
-  }
+    unsafe impl MakeCppStorage for Foo {
+        unsafe fn allocate_uninitialized_cpp_storage() -> *mut Self {
+            super::ffi::foo_create_uninitialized()
+        }
 
-  impl Bar {
-    pub fn new() -> impl New<Output = Self> {
-      unsafe {
-        moveit2::new::by_raw(|space| {
-          let space = Pin::into_inner_unchecked(space).as_mut_ptr();
-          super::ffi::bar_constructor(space)
-        })
-      }
+        unsafe fn free_uninitialized_cpp_storage(ptr: *mut Self) {
+            super::ffi::foo_free_uninitialized(ptr);
+        }
     }
-  }
 
-  unsafe impl MoveNew for Bar {
-    unsafe fn move_new(
-      mut src: Pin<moveit2::MoveRef<Self>>,
-      this: Pin<&mut MaybeUninit<Self>>,
-    ) {
-      let src: &mut _ = Pin::into_inner_unchecked(src.as_mut());
-      let this = this.as_ptr().cast_mut();
-      super::ffi::bar_move(this, src);
-      super::ffi::bar_destructor(src);
+    impl Foo {
+        pub fn new() -> impl New<Output = Self> {
+            unsafe {
+                moveit2::new::by_raw(|space| {
+                    let space = Pin::into_inner_unchecked(space).as_mut_ptr();
+                    super::ffi::foo_constructor(space)
+                })
+            }
+        }
     }
-  }
 
-  impl Drop for Bar {
-    fn drop(&mut self) {
-      unsafe { super::ffi::bar_destructor(self) };
+    unsafe impl MoveNew for Foo {
+        unsafe fn move_new(
+            mut src: Pin<moveit2::MoveRef<Self>>,
+            this: Pin<&mut MaybeUninit<Self>>,
+        ) {
+            let src: &mut _ = Pin::into_inner_unchecked(src.as_mut());
+            let this = Pin::into_inner_unchecked(this).as_mut_ptr();
+            super::ffi::foo_move(this, src);
+            super::ffi::foo_destructor(src);
+        }
     }
-  }
+
+    impl Drop for Foo {
+        fn drop(&mut self) {
+            unsafe { super::ffi::foo_destructor(self) };
+        }
+    }
+
+    #[repr(C)]
+    pub struct Bar {
+        // opaque
+        _pin: PhantomData<PhantomPinned>,
+        _data: [u32; 4],
+    }
+
+    unsafe impl ExternType for Bar {
+        type Id = type_id!("Bar");
+        type Kind = Opaque;
+    }
+
+    unsafe impl MakeCppStorage for Bar {
+        unsafe fn allocate_uninitialized_cpp_storage() -> *mut Self {
+            super::ffi::bar_create_uninitialized()
+        }
+
+        unsafe fn free_uninitialized_cpp_storage(ptr: *mut Self) {
+            super::ffi::bar_free_uninitialized(ptr);
+        }
+    }
+
+    impl Bar {
+        pub fn new() -> impl New<Output = Self> {
+            unsafe {
+                moveit2::new::by_raw(|space| {
+                    let space = Pin::into_inner_unchecked(space).as_mut_ptr();
+                    super::ffi::bar_constructor(space)
+                })
+            }
+        }
+    }
+
+    unsafe impl MoveNew for Bar {
+        unsafe fn move_new(
+            mut src: Pin<moveit2::MoveRef<Self>>,
+            this: Pin<&mut MaybeUninit<Self>>,
+        ) {
+            let src: &mut _ = Pin::into_inner_unchecked(src.as_mut());
+            let this = this.as_ptr().cast_mut();
+            super::ffi::bar_move(this, src);
+            super::ffi::bar_destructor(src);
+        }
+    }
+
+    impl Drop for Bar {
+        fn drop(&mut self) {
+            unsafe { super::ffi::bar_destructor(self) };
+        }
+    }
 }
 
 /// Queries C++ to find the current state of object lifetimes.
@@ -185,125 +185,125 @@ mod bindgenish {
 struct StatusChecker<'a>(#[allow(unused)] MutexGuard<'a, ()>);
 
 impl<'a> StatusChecker<'a> {
-  fn new() -> Self {
-    static MUTEX: OnceCell<Mutex<()>> = OnceCell::new();
-    let guard = MUTEX.get_or_init(|| Mutex::new(())).lock().unwrap();
-    ffi::ResetStatus();
-    Self(guard)
-  }
+    fn new() -> Self {
+        static MUTEX: OnceCell<Mutex<()>> = OnceCell::new();
+        let guard = MUTEX.get_or_init(|| Mutex::new(())).lock().unwrap();
+        ffi::ResetStatus();
+        Self(guard)
+    }
 
-  fn assert_status(&self, expected: ffi::Status) {
-    assert_eq!(ffi::GetStatus(), expected);
-  }
+    fn assert_status(&self, expected: ffi::Status) {
+        assert_eq!(ffi::GetStatus(), expected);
+    }
 }
 
 #[test]
 fn test_stack_emplacement() {
-  let status_checker = StatusChecker::new();
-  {
-    status_checker.assert_status(ffi::Status::Unallocated);
-    moveit!(let mut bar = bindgenish::Bar::new());
-    status_checker.assert_status(ffi::Status::Initialized);
-    drop(bar);
-  }
-  status_checker.assert_status(ffi::Status::Destructed);
+    let status_checker = StatusChecker::new();
+    {
+        status_checker.assert_status(ffi::Status::Unallocated);
+        moveit!(let mut bar = bindgenish::Bar::new());
+        status_checker.assert_status(ffi::Status::Initialized);
+        drop(bar);
+    }
+    status_checker.assert_status(ffi::Status::Destructed);
 }
 
 #[test]
 fn test_stack_emplacement_complex() {
-  let status_checker = StatusChecker::new();
-  {
-    status_checker.assert_status(ffi::Status::Unallocated);
-    moveit!(let mut foo = bindgenish::Foo::new());
-    status_checker.assert_status(ffi::Status::Initialized);
-    assert!(!foo.GetA());
-    foo.as_mut().Modify();
-    assert!(foo.GetA());
-  }
-  status_checker.assert_status(ffi::Status::Destructed);
+    let status_checker = StatusChecker::new();
+    {
+        status_checker.assert_status(ffi::Status::Unallocated);
+        moveit!(let mut foo = bindgenish::Foo::new());
+        status_checker.assert_status(ffi::Status::Initialized);
+        assert!(!foo.GetA());
+        foo.as_mut().Modify();
+        assert!(foo.GetA());
+    }
+    status_checker.assert_status(ffi::Status::Destructed);
 }
 
 #[test]
 fn test_box_emplacement() {
-  let status_checker = StatusChecker::new();
-  status_checker.assert_status(ffi::Status::Unallocated);
-  {
-    let bar = Box::emplace(bindgenish::Bar::new());
-    status_checker.assert_status(ffi::Status::Initialized);
-    drop(bar);
-  }
-  status_checker.assert_status(ffi::Status::Destructed);
+    let status_checker = StatusChecker::new();
+    status_checker.assert_status(ffi::Status::Unallocated);
+    {
+        let bar = Box::emplace(bindgenish::Bar::new());
+        status_checker.assert_status(ffi::Status::Initialized);
+        drop(bar);
+    }
+    status_checker.assert_status(ffi::Status::Destructed);
 }
 
 #[test]
 fn test_box_emplacement_complex() {
-  let status_checker = StatusChecker::new();
-  status_checker.assert_status(ffi::Status::Unallocated);
-  {
-    let mut foo = Box::emplace(bindgenish::Foo::new());
-    status_checker.assert_status(ffi::Status::Initialized);
-    assert!(!foo.GetA());
-    foo.as_mut().Modify();
-    assert!(foo.GetA());
-  }
-  status_checker.assert_status(ffi::Status::Destructed);
+    let status_checker = StatusChecker::new();
+    status_checker.assert_status(ffi::Status::Unallocated);
+    {
+        let mut foo = Box::emplace(bindgenish::Foo::new());
+        status_checker.assert_status(ffi::Status::Initialized);
+        assert!(!foo.GetA());
+        foo.as_mut().Modify();
+        assert!(foo.GetA());
+    }
+    status_checker.assert_status(ffi::Status::Destructed);
 }
 
 #[test]
 fn test_unique_ptr_emplacement() {
-  let status_checker = StatusChecker::new();
-  status_checker.assert_status(ffi::Status::Unallocated);
-  {
-    let bar = UniquePtr::emplace(bindgenish::Bar::new());
-    status_checker.assert_status(ffi::Status::Initialized);
-    drop(bar);
-  }
-  // We have no custom operator delete so the last status
-  // we record is merely 'destructed'
-  status_checker.assert_status(ffi::Status::Destructed);
+    let status_checker = StatusChecker::new();
+    status_checker.assert_status(ffi::Status::Unallocated);
+    {
+        let bar = UniquePtr::emplace(bindgenish::Bar::new());
+        status_checker.assert_status(ffi::Status::Initialized);
+        drop(bar);
+    }
+    // We have no custom operator delete so the last status
+    // we record is merely 'destructed'
+    status_checker.assert_status(ffi::Status::Destructed);
 }
 
 #[test]
 fn test_unique_ptr_emplacement_complex() {
-  let status_checker = StatusChecker::new();
-  status_checker.assert_status(ffi::Status::Unallocated);
-  {
+    let status_checker = StatusChecker::new();
+    status_checker.assert_status(ffi::Status::Unallocated);
+    {
+        let mut foo = UniquePtr::emplace(bindgenish::Foo::new());
+        status_checker.assert_status(ffi::Status::Initialized);
+        assert!(!foo.GetA());
+        foo.pin_mut().Modify();
+        assert!(foo.GetA());
+    }
+    status_checker.assert_status(ffi::Status::Deallocated);
+}
+
+#[test]
+fn test_move_from_up() {
+    let status_checker = StatusChecker::new();
+    status_checker.assert_status(ffi::Status::Unallocated);
+    let bar = UniquePtr::emplace(bindgenish::Bar::new());
+    status_checker.assert_status(ffi::Status::Initialized);
+    moveit!(let bar2 = moveit2::new::mov(bar));
+    // No custom operator::delete for this type
+    status_checker.assert_status(ffi::Status::DeallocatedUninitialized);
+    drop(bar2);
+    status_checker.assert_status(ffi::Status::Destructed);
+}
+
+#[test]
+fn test_move_from_up_complex() {
+    let status_checker = StatusChecker::new();
+    status_checker.assert_status(ffi::Status::Unallocated);
     let mut foo = UniquePtr::emplace(bindgenish::Foo::new());
     status_checker.assert_status(ffi::Status::Initialized);
     assert!(!foo.GetA());
     foo.pin_mut().Modify();
     assert!(foo.GetA());
-  }
-  status_checker.assert_status(ffi::Status::Deallocated);
-}
-
-#[test]
-fn test_move_from_up() {
-  let status_checker = StatusChecker::new();
-  status_checker.assert_status(ffi::Status::Unallocated);
-  let bar = UniquePtr::emplace(bindgenish::Bar::new());
-  status_checker.assert_status(ffi::Status::Initialized);
-  moveit!(let bar2 = moveit2::new::mov(bar));
-  // No custom operator::delete for this type
-  status_checker.assert_status(ffi::Status::DeallocatedUninitialized);
-  drop(bar2);
-  status_checker.assert_status(ffi::Status::Destructed);
-}
-
-#[test]
-fn test_move_from_up_complex() {
-  let status_checker = StatusChecker::new();
-  status_checker.assert_status(ffi::Status::Unallocated);
-  let mut foo = UniquePtr::emplace(bindgenish::Foo::new());
-  status_checker.assert_status(ffi::Status::Initialized);
-  assert!(!foo.GetA());
-  foo.pin_mut().Modify();
-  assert!(foo.GetA());
-  moveit!(let mut foo2 = moveit2::new::mov(foo));
-  // If this line determines the status to be DeallocatedUninitialized,
-  // we've failed to call the overridden operator delete
-  status_checker.assert_status(ffi::Status::Deallocated);
-  assert!(foo2.GetA());
-  drop(foo2);
-  status_checker.assert_status(ffi::Status::Destructed);
+    moveit!(let mut foo2 = moveit2::new::mov(foo));
+    // If this line determines the status to be DeallocatedUninitialized,
+    // we've failed to call the overridden operator delete
+    status_checker.assert_status(ffi::Status::Deallocated);
+    assert!(foo2.GetA());
+    drop(foo2);
+    status_checker.assert_status(ffi::Status::Destructed);
 }

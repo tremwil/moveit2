@@ -17,15 +17,15 @@
 use std::mem::MaybeUninit;
 use std::pin::Pin;
 
-use cxx::memory::UniquePtrTarget;
 use cxx::UniquePtr;
+use cxx::memory::UniquePtrTarget;
 
-use crate::move_ref::AsMove;
-use crate::slot::DroppingSlot;
 use crate::DerefMove;
 use crate::Emplace;
 use crate::MoveRef;
 use crate::TryNew;
+use crate::move_ref::AsMove;
+use crate::slot::DroppingSlot;
 
 /// A type which has the ability to create heap storage space
 /// for itself in C++, without initializing that storage.
@@ -40,46 +40,45 @@ use crate::TryNew;
 /// * before they're initialized, using `free_uninitialized_cpp_storage`
 /// * after they're initialized, via a delete expression like `delete p;`
 pub unsafe trait MakeCppStorage: Sized {
-  /// Allocates heap space for this type in C++ and return a pointer
-  /// to that space, but do not initialize that space (i.e. do not
-  /// yet call a constructor).
-  ///
-  /// # Safety
-  ///
-  /// To avoid memory leaks, callers must ensure that this space is
-  /// freed using `free_uninitialized_cpp_storage`, or is converted into
-  /// a [`UniquePtr`] such that it can later be freed by
-  /// `std::unique_ptr<T, std::default_delete<T>>`.
-  unsafe fn allocate_uninitialized_cpp_storage() -> *mut Self;
+    /// Allocates heap space for this type in C++ and return a pointer
+    /// to that space, but do not initialize that space (i.e. do not
+    /// yet call a constructor).
+    ///
+    /// # Safety
+    ///
+    /// To avoid memory leaks, callers must ensure that this space is
+    /// freed using `free_uninitialized_cpp_storage`, or is converted into
+    /// a [`UniquePtr`] such that it can later be freed by
+    /// `std::unique_ptr<T, std::default_delete<T>>`.
+    unsafe fn allocate_uninitialized_cpp_storage() -> *mut Self;
 
-  /// Frees a C++ allocation which has not yet
-  /// had a constructor called.
-  ///
-  /// # Safety
-  ///
-  /// Callers guarantee that the pointer here was allocated by
-  /// `allocate_uninitialized_cpp_storage` and has not been
-  /// initialized.
-  unsafe fn free_uninitialized_cpp_storage(ptr: *mut Self);
+    /// Frees a C++ allocation which has not yet
+    /// had a constructor called.
+    ///
+    /// # Safety
+    ///
+    /// Callers guarantee that the pointer here was allocated by
+    /// `allocate_uninitialized_cpp_storage` and has not been
+    /// initialized.
+    unsafe fn free_uninitialized_cpp_storage(ptr: *mut Self);
 }
 
 impl<T: MakeCppStorage + UniquePtrTarget> Emplace<T> for UniquePtr<T> {
-  type Output = Self;
+    type Output = Self;
 
-  fn try_emplace<N: TryNew<Output = T>>(n: N) -> Result<Self, N::Error> {
-    unsafe {
-      let uninit_ptr = T::allocate_uninitialized_cpp_storage();
-      let uninit =
-        Pin::new_unchecked(&mut *(uninit_ptr as *mut MaybeUninit<T>));
-      // FIXME - this is not panic safe.
-      let result = n.try_new(uninit);
-      if let Err(err) = result {
-        T::free_uninitialized_cpp_storage(uninit_ptr);
-        return Err(err);
-      }
-      Ok(UniquePtr::from_raw(uninit_ptr))
+    fn try_emplace<N: TryNew<Output = T>>(n: N) -> Result<Self, N::Error> {
+        unsafe {
+            let uninit_ptr = T::allocate_uninitialized_cpp_storage();
+            let uninit = Pin::new_unchecked(&mut *(uninit_ptr as *mut MaybeUninit<T>));
+            // FIXME - this is not panic safe.
+            let result = n.try_new(uninit);
+            if let Err(err) = result {
+                T::free_uninitialized_cpp_storage(uninit_ptr);
+                return Err(err);
+            }
+            Ok(UniquePtr::from_raw(uninit_ptr))
+        }
     }
-  }
 }
 
 /// This is an implementation detail of the support for moving out of
@@ -90,52 +89,51 @@ impl<T: MakeCppStorage + UniquePtrTarget> Emplace<T> for UniquePtr<T> {
 pub struct DeallocateSpaceGuard<T: MakeCppStorage>(*mut T);
 
 impl<T: MakeCppStorage> DeallocateSpaceGuard<T> {
-  fn assume_init_mut(&mut self) -> &mut T {
-    unsafe { &mut *self.0 }
-  }
+    fn assume_init_mut(&mut self) -> &mut T {
+        unsafe { &mut *self.0 }
+    }
 }
 
 impl<T: MakeCppStorage> Drop for DeallocateSpaceGuard<T> {
-  fn drop(&mut self) {
-    unsafe { T::free_uninitialized_cpp_storage(self.0) };
-  }
+    fn drop(&mut self) {
+        unsafe { T::free_uninitialized_cpp_storage(self.0) };
+    }
 }
 
 impl<T> AsMove for UniquePtr<T>
 where
-  T: UniquePtrTarget + MakeCppStorage,
+    T: UniquePtrTarget + MakeCppStorage,
 {
-  type Storage = DeallocateSpaceGuard<T>;
+    type Storage = DeallocateSpaceGuard<T>;
 
-  #[inline]
-  fn as_move<'frame>(
-    self,
-    storage: DroppingSlot<'frame, Self::Storage>,
-  ) -> Pin<MoveRef<'frame, Self::Target>>
-  where
-    Self: 'frame,
-  {
-    let cast = DeallocateSpaceGuard(self.into_raw());
-    let (storage, drop_flag) = storage.put(cast);
-    let this =
-      unsafe { MoveRef::new_unchecked(storage.assume_init_mut(), drop_flag) };
-    MoveRef::into_pin(this)
-  }
+    #[inline]
+    fn as_move<'frame>(
+        self,
+        storage: DroppingSlot<'frame, Self::Storage>,
+    ) -> Pin<MoveRef<'frame, Self::Target>>
+    where
+        Self: 'frame,
+    {
+        let cast = DeallocateSpaceGuard(self.into_raw());
+        let (storage, drop_flag) = storage.put(cast);
+        let this = unsafe { MoveRef::new_unchecked(storage.assume_init_mut(), drop_flag) };
+        MoveRef::into_pin(this)
+    }
 }
 
 unsafe impl<T> DerefMove for UniquePtr<T>
 where
-  T: MakeCppStorage + UniquePtrTarget,
-  T: Unpin,
+    T: MakeCppStorage + UniquePtrTarget,
+    T: Unpin,
 {
-  #[inline]
-  fn deref_move<'frame>(
-    self,
-    storage: DroppingSlot<'frame, Self::Storage>,
-  ) -> MoveRef<'frame, Self::Target>
-  where
-    Self: 'frame,
-  {
-    Pin::into_inner(self.as_move(storage))
-  }
+    #[inline]
+    fn deref_move<'frame>(
+        self,
+        storage: DroppingSlot<'frame, Self::Storage>,
+    ) -> MoveRef<'frame, Self::Target>
+    where
+        Self: 'frame,
+    {
+        Pin::into_inner(self.as_move(storage))
+    }
 }

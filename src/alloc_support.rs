@@ -24,47 +24,46 @@ use crate::move_ref::{AsMove, DerefMove};
 use crate::slot::DroppingSlot;
 
 impl<T> AsMove for Box<T> {
-  type Storage = Box<MaybeUninit<T>>;
+    type Storage = Box<MaybeUninit<T>>;
 
-  #[inline]
-  fn as_move<'frame>(
-    self,
-    storage: DroppingSlot<'frame, Self::Storage>,
-  ) -> Pin<MoveRef<'frame, Self::Target>>
-  where
-    Self: 'frame,
-  {
-    MoveRef::into_pin(self.deref_move(storage))
-  }
+    #[inline]
+    fn as_move<'frame>(
+        self,
+        storage: DroppingSlot<'frame, Self::Storage>,
+    ) -> Pin<MoveRef<'frame, Self::Target>>
+    where
+        Self: 'frame,
+    {
+        MoveRef::into_pin(self.deref_move(storage))
+    }
 }
 
 unsafe impl<T> DerefMove for Box<T> {
-  #[inline]
-  fn deref_move<'frame>(
-    self,
-    storage: DroppingSlot<'frame, Self::Storage>,
-  ) -> MoveRef<'frame, Self::Target>
-  where
-    Self: 'frame,
-  {
-    let cast =
-      unsafe { Box::from_raw(Box::into_raw(self).cast::<MaybeUninit<T>>()) };
+    #[inline]
+    fn deref_move<'frame>(
+        self,
+        storage: DroppingSlot<'frame, Self::Storage>,
+    ) -> MoveRef<'frame, Self::Target>
+    where
+        Self: 'frame,
+    {
+        let cast = unsafe { Box::from_raw(Box::into_raw(self).cast::<MaybeUninit<T>>()) };
 
-    let (storage, drop_flag) = storage.put(cast);
-    unsafe { MoveRef::new_unchecked(storage.assume_init_mut(), drop_flag) }
-  }
+        let (storage, drop_flag) = storage.put(cast);
+        unsafe { MoveRef::new_unchecked(storage.assume_init_mut(), drop_flag) }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-  use crate::Emplace;
-  use crate::move_ref::test::Immovable;
-  use crate::moveit;
-  use crate::new::mov;
+    use crate::Emplace;
+    use crate::move_ref::test::Immovable;
+    use crate::moveit;
+    use crate::new::mov;
 
-  #[test]
-  fn test_mov_box() {
-    let foo = alloc::boxed::Box::emplace(Immovable::new());
-    moveit!(let _foo = mov(foo));
-  }
+    #[test]
+    fn test_mov_box() {
+        let foo = alloc::boxed::Box::emplace(Immovable::new());
+        moveit!(let _foo = mov(foo));
+    }
 }

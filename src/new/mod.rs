@@ -47,49 +47,49 @@ pub use move_new::*;
 /// state.
 #[must_use = "`New`s do nothing until emplaced into storage"]
 pub unsafe trait New: Sized {
-  /// The type to construct.
-  type Output;
-  /// Construct a new value using the arguments stored in `self`.
-  ///
-  /// # Safety
-  ///
-  /// `this` must be freshly-created memory; this function must not
-  /// be used to mutate a previously-pinned pointer that has had `self: Pin`
-  /// functions called on it.
-  unsafe fn new(self, this: Pin<&mut MaybeUninit<Self::Output>>);
+    /// The type to construct.
+    type Output;
+    /// Construct a new value using the arguments stored in `self`.
+    ///
+    /// # Safety
+    ///
+    /// `this` must be freshly-created memory; this function must not
+    /// be used to mutate a previously-pinned pointer that has had `self: Pin`
+    /// functions called on it.
+    unsafe fn new(self, this: Pin<&mut MaybeUninit<Self::Output>>);
 
-  /// Adds a post-construction operation.
-  ///
-  /// This function wraps `self` in an another [`New`] type which will call
-  /// `post` once the main emplacement operation is complete. This is most
-  /// useful for the case where creation of the value itself does not depend
-  /// on the final address, but where some address-sensitive setup may want
-  /// to occur; this can help minimize the scope (or even need for) `unsafe`.
-  ///
-  /// This function is best combined with other helpers:
-  ///
-  /// ```
-  /// # use moveit2::{new, moveit, New};
-  /// # use std::pin::Pin;
-  /// pub struct MyType { /* ... */ }
-  ///
-  /// impl MyType {
-  ///   pub fn new() -> impl New<Output = Self> {
-  ///     new::of(MyType { /* ... */ }).with(|this| {
-  ///       // Address-sensitive setup can occur here.
-  ///     })
-  ///   }
-  /// }
-  /// ```
-  ///
-  /// Note: The return value of this function should not be relied upon; a
-  /// future version will replace it with `impl New`.
-  fn with<F>(self, post: F) -> With<Self, F>
-  where
-    F: FnOnce(Pin<&mut Self::Output>),
-  {
-    With(self, post)
-  }
+    /// Adds a post-construction operation.
+    ///
+    /// This function wraps `self` in an another [`New`] type which will call
+    /// `post` once the main emplacement operation is complete. This is most
+    /// useful for the case where creation of the value itself does not depend
+    /// on the final address, but where some address-sensitive setup may want
+    /// to occur; this can help minimize the scope (or even need for) `unsafe`.
+    ///
+    /// This function is best combined with other helpers:
+    ///
+    /// ```
+    /// # use moveit2::{new, moveit, New};
+    /// # use std::pin::Pin;
+    /// pub struct MyType { /* ... */ }
+    ///
+    /// impl MyType {
+    ///   pub fn new() -> impl New<Output = Self> {
+    ///     new::of(MyType { /* ... */ }).with(|this| {
+    ///       // Address-sensitive setup can occur here.
+    ///     })
+    ///   }
+    /// }
+    /// ```
+    ///
+    /// Note: The return value of this function should not be relied upon; a
+    /// future version will replace it with `impl New`.
+    fn with<F>(self, post: F) -> With<Self, F>
+    where
+        F: FnOnce(Pin<&mut Self::Output>),
+    {
+        With(self, post)
+    }
 }
 
 /// An in-place constructor for a particular type, which can potentially fail.
@@ -103,44 +103,38 @@ pub unsafe trait New: Sized {
 /// initialized state when it returns `Ok`.
 #[must_use = "`New`s do nothing until emplaced into storage"]
 pub unsafe trait TryNew: Sized {
-  /// The type to construct.
-  type Output;
-  /// The error the construction operation may return.
-  type Error;
-  /// Try to construct a new value using the arguments stored in `self`.
-  ///
-  /// # Safety
-  ///
-  /// `this` must be freshly-created memory; this function must not
-  /// be used to mutate a previously-pinned pointer that has had `self: Pin`
-  /// functions called on it.
-  unsafe fn try_new(
-    self,
-    this: Pin<&mut MaybeUninit<Self::Output>>,
-  ) -> Result<(), Self::Error>;
+    /// The type to construct.
+    type Output;
+    /// The error the construction operation may return.
+    type Error;
+    /// Try to construct a new value using the arguments stored in `self`.
+    ///
+    /// # Safety
+    ///
+    /// `this` must be freshly-created memory; this function must not
+    /// be used to mutate a previously-pinned pointer that has had `self: Pin`
+    /// functions called on it.
+    unsafe fn try_new(self, this: Pin<&mut MaybeUninit<Self::Output>>) -> Result<(), Self::Error>;
 
-  /// Adds a post-construction operation.
-  ///
-  /// This function is analogous to [`New::with()`]; see its documentation for
-  /// more information.
-  ///
-  /// Note: The return value of this function should not be relied upon; a
-  /// future version will replace it with `impl TryNew`.
-  fn with<F>(self, post: F) -> TryWith<Self, F> {
-    TryWith(self, post)
-  }
+    /// Adds a post-construction operation.
+    ///
+    /// This function is analogous to [`New::with()`]; see its documentation for
+    /// more information.
+    ///
+    /// Note: The return value of this function should not be relied upon; a
+    /// future version will replace it with `impl TryNew`.
+    fn with<F>(self, post: F) -> TryWith<Self, F> {
+        TryWith(self, post)
+    }
 }
 
 unsafe impl<N: New> TryNew for N {
-  type Output = N::Output;
-  type Error = Infallible;
-  unsafe fn try_new(
-    self,
-    this: Pin<&mut MaybeUninit<Self::Output>>,
-  ) -> Result<(), Self::Error> {
-    unsafe { self.new(this) };
-    Ok(())
-  }
+    type Output = N::Output;
+    type Error = Infallible;
+    unsafe fn try_new(self, this: Pin<&mut MaybeUninit<Self::Output>>) -> Result<(), Self::Error> {
+        unsafe { self.new(this) };
+        Ok(())
+    }
 }
 
 /// A pointer type that may be "emplaced" as a stable address which a [`New`] may be used to
@@ -155,76 +149,69 @@ unsafe impl<N: New> TryNew for N {
 /// allows obtaining pinned mutable references to `T` due to its more restrictive API, and hence
 /// `cxx::UniquePtr<T>` does not need to be pinned itself.
 pub trait Emplace<T>: Sized + Deref {
-  /// The stable address type within which a value of type `T` is emplaced.
-  type Output: Deref<Target = Self::Target>;
+    /// The stable address type within which a value of type `T` is emplaced.
+    type Output: Deref<Target = Self::Target>;
 
-  /// Constructs a new smart pointer and emplaces `n` into its storage.
-  fn emplace<N: New<Output = T>>(n: N) -> Self::Output {
-    match Self::try_emplace(n) {
-      Ok(x) => x,
-      Err(e) => match e {},
+    /// Constructs a new smart pointer and emplaces `n` into its storage.
+    fn emplace<N: New<Output = T>>(n: N) -> Self::Output {
+        match Self::try_emplace(n) {
+            Ok(x) => x,
+            Err(e) => match e {},
+        }
     }
-  }
 
-  /// Constructs a new smart pointer and tries to emplace `n` into its storage.
-  fn try_emplace<N: TryNew<Output = T>>(n: N)
-  -> Result<Self::Output, N::Error>;
+    /// Constructs a new smart pointer and tries to emplace `n` into its storage.
+    fn try_emplace<N: TryNew<Output = T>>(n: N) -> Result<Self::Output, N::Error>;
 }
 
 #[cfg(feature = "alloc")]
 mod alloc_support {
-  use super::*;
+    use super::*;
 
-  impl<T> Emplace<T> for Box<T> {
-    type Output = Pin<Self>;
+    impl<T> Emplace<T> for Box<T> {
+        type Output = Pin<Self>;
 
-    fn try_emplace<N: TryNew<Output = T>>(
-      n: N,
-    ) -> Result<Self::Output, N::Error> {
-      let mut uninit = Box::new(MaybeUninit::<T>::uninit());
-      unsafe {
-        let pinned = Pin::new_unchecked(&mut *uninit);
-        n.try_new(pinned)?;
-        Ok(Pin::new_unchecked(Box::from_raw(
-          Box::into_raw(uninit).cast::<T>(),
-        )))
-      }
+        fn try_emplace<N: TryNew<Output = T>>(n: N) -> Result<Self::Output, N::Error> {
+            let mut uninit = Box::new(MaybeUninit::<T>::uninit());
+            unsafe {
+                let pinned = Pin::new_unchecked(&mut *uninit);
+                n.try_new(pinned)?;
+                Ok(Pin::new_unchecked(Box::from_raw(
+                    Box::into_raw(uninit).cast::<T>(),
+                )))
+            }
+        }
     }
-  }
 
-  impl<T> Emplace<T> for Rc<T> {
-    type Output = Pin<Self>;
+    impl<T> Emplace<T> for Rc<T> {
+        type Output = Pin<Self>;
 
-    fn try_emplace<N: TryNew<Output = T>>(
-      n: N,
-    ) -> Result<Self::Output, N::Error> {
-      let uninit = Rc::new(MaybeUninit::<T>::uninit());
-      unsafe {
-        let pinned = Pin::new_unchecked(&mut *(Rc::as_ptr(&uninit) as *mut _));
-        n.try_new(pinned)?;
-        Ok(Pin::new_unchecked(Rc::from_raw(
-          Rc::into_raw(uninit).cast::<T>(),
-        )))
-      }
+        fn try_emplace<N: TryNew<Output = T>>(n: N) -> Result<Self::Output, N::Error> {
+            let uninit = Rc::new(MaybeUninit::<T>::uninit());
+            unsafe {
+                let pinned = Pin::new_unchecked(&mut *(Rc::as_ptr(&uninit) as *mut _));
+                n.try_new(pinned)?;
+                Ok(Pin::new_unchecked(Rc::from_raw(
+                    Rc::into_raw(uninit).cast::<T>(),
+                )))
+            }
+        }
     }
-  }
 
-  impl<T> Emplace<T> for Arc<T> {
-    type Output = Pin<Self>;
+    impl<T> Emplace<T> for Arc<T> {
+        type Output = Pin<Self>;
 
-    fn try_emplace<N: TryNew<Output = T>>(
-      n: N,
-    ) -> Result<Self::Output, N::Error> {
-      let uninit = Arc::new(MaybeUninit::<T>::uninit());
-      unsafe {
-        let pinned = Pin::new_unchecked(&mut *(Arc::as_ptr(&uninit) as *mut _));
-        n.try_new(pinned)?;
-        Ok(Pin::new_unchecked(Arc::from_raw(
-          Arc::into_raw(uninit).cast::<T>(),
-        )))
-      }
+        fn try_emplace<N: TryNew<Output = T>>(n: N) -> Result<Self::Output, N::Error> {
+            let uninit = Arc::new(MaybeUninit::<T>::uninit());
+            unsafe {
+                let pinned = Pin::new_unchecked(&mut *(Arc::as_ptr(&uninit) as *mut _));
+                n.try_new(pinned)?;
+                Ok(Pin::new_unchecked(Arc::from_raw(
+                    Arc::into_raw(uninit).cast::<T>(),
+                )))
+            }
+        }
     }
-  }
 }
 
 #[doc(hidden)]
@@ -232,16 +219,16 @@ pub struct With<N, F>(N, F);
 
 unsafe impl<N: New, F> New for With<N, F>
 where
-  F: FnOnce(Pin<&mut N::Output>),
+    F: FnOnce(Pin<&mut N::Output>),
 {
-  type Output = N::Output;
-  #[inline]
-  unsafe fn new(self, mut this: Pin<&mut MaybeUninit<Self::Output>>) {
-    unsafe { self.0.new(this.as_mut()) };
-    // Now that `new()` has returned, we can assume `this` is initialized.
-    let this = unsafe { this.map_unchecked_mut(|x| x.assume_init_mut()) };
-    (self.1)(this)
-  }
+    type Output = N::Output;
+    #[inline]
+    unsafe fn new(self, mut this: Pin<&mut MaybeUninit<Self::Output>>) {
+        unsafe { self.0.new(this.as_mut()) };
+        // Now that `new()` has returned, we can assume `this` is initialized.
+        let this = unsafe { this.map_unchecked_mut(|x| x.assume_init_mut()) };
+        (self.1)(this)
+    }
 }
 
 #[doc(hidden)]
@@ -249,20 +236,20 @@ pub struct TryWith<N, F>(N, F);
 
 unsafe impl<N: TryNew, F> TryNew for TryWith<N, F>
 where
-  F: FnOnce(Pin<&mut N::Output>) -> Result<(), N::Error>,
+    F: FnOnce(Pin<&mut N::Output>) -> Result<(), N::Error>,
 {
-  type Output = N::Output;
-  type Error = N::Error;
-  #[inline]
-  unsafe fn try_new(
-    self,
-    mut this: Pin<&mut MaybeUninit<Self::Output>>,
-  ) -> Result<(), Self::Error> {
-    unsafe { self.0.try_new(this.as_mut())? };
-    // Now that `new()` has returned, we can assume `this` is initialized.
-    let this = unsafe { this.map_unchecked_mut(|x| x.assume_init_mut()) };
-    (self.1)(this)
-  }
+    type Output = N::Output;
+    type Error = N::Error;
+    #[inline]
+    unsafe fn try_new(
+        self,
+        mut this: Pin<&mut MaybeUninit<Self::Output>>,
+    ) -> Result<(), Self::Error> {
+        unsafe { self.0.try_new(this.as_mut())? };
+        // Now that `new()` has returned, we can assume `this` is initialized.
+        let this = unsafe { this.map_unchecked_mut(|x| x.assume_init_mut()) };
+        (self.1)(this)
+    }
 }
 
 /// A swappable type, which is able to efficiently swap the contents of two of
@@ -273,6 +260,6 @@ where
 ///
 /// It is possible to implement swapping with a source type that isn't `Self`.
 pub trait Swap<Rhs = Self> {
-  /// Swaps the contents of `self` and `src` without running any destructors.
-  fn swap_with(self: Pin<&mut Self>, src: Pin<&mut Rhs>);
+    /// Swaps the contents of `self` and `src` without running any destructors.
+    fn swap_with(self: Pin<&mut Self>, src: Pin<&mut Rhs>);
 }

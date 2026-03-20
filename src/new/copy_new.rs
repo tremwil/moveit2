@@ -27,28 +27,28 @@ use crate::new::New;
 /// After [`CopyNew::copy_new()`] is called:
 /// - `this` must have been initialized.
 pub unsafe trait CopyNew: Sized {
-  /// Copy-construct `src` into `this`, effectively re-pinning it at a new
-  /// location.
-  ///
-  /// # Safety
-  ///
-  /// The same safety requirements of [`New::new()`] apply.
-  unsafe fn copy_new(src: &Self, this: Pin<&mut MaybeUninit<Self>>);
+    /// Copy-construct `src` into `this`, effectively re-pinning it at a new
+    /// location.
+    ///
+    /// # Safety
+    ///
+    /// The same safety requirements of [`New::new()`] apply.
+    unsafe fn copy_new(src: &Self, this: Pin<&mut MaybeUninit<Self>>);
 }
 
 /// Returns a new `New` that uses a copy constructor.
 #[inline]
 pub fn copy<P>(ptr: P) -> impl New<Output = P::Target>
 where
-  P: Deref,
-  P::Target: CopyNew,
+    P: Deref,
+    P::Target: CopyNew,
 {
-  unsafe {
-    new::by_raw(move |this| {
-      CopyNew::copy_new(&*ptr, this);
+    unsafe {
+        new::by_raw(move |this| {
+            CopyNew::copy_new(&*ptr, this);
 
-      // Because `*ptr` is still intact, we can drop it normally.
-      mem::drop(ptr)
-    })
-  }
+            // Because `*ptr` is still intact, we can drop it normally.
+            mem::drop(ptr)
+        })
+    }
 }

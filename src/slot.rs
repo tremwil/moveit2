@@ -69,8 +69,8 @@ use crate::new::TryNew;
 
 #[cfg(doc)]
 use {
-  crate::{move_ref::DerefMove, moveit, slot},
-  alloc::boxed::Box,
+    crate::{move_ref::DerefMove, moveit, slot},
+    alloc::boxed::Box,
 };
 
 /// An empty slot on the stack into which a value could be emplaced.
@@ -80,106 +80,106 @@ use {
 ///
 /// See [`slot!()`] and [the module documentation][self].
 pub struct Slot<'frame, T> {
-  ptr: &'frame mut MaybeUninit<T>,
-  drop_flag: DropFlag<'frame>,
+    ptr: &'frame mut MaybeUninit<T>,
+    drop_flag: DropFlag<'frame>,
 }
 
 impl<'frame, T> Slot<'frame, T> {
-  /// Creates a new `Slot` with the given pointer as its basis.
-  ///
-  /// To safely construct a `Slot`, use [`slot!()`].
-  ///
-  /// # Safety
-  ///
-  /// `ptr` must not be outlived by any other pointers to its allocation.
-  ///
-  /// `drop_flag`'s value must be dead, and must be a drop flag governing
-  /// the destruction of `ptr`'s storage in an appropriate manner as described
-  /// in [`moveit2::drop_flag`][crate::drop_flag].
-  pub unsafe fn new_unchecked(
-    ptr: &'frame mut MaybeUninit<T>,
-    drop_flag: DropFlag<'frame>,
-  ) -> Self {
-    Self { ptr, drop_flag }
-  }
-
-  /// Put `val` into this slot, returning a new [`MoveRef`].
-  pub fn put(self, val: T) -> MoveRef<'frame, T> {
-    unsafe {
-      // SAFETY: Pinning is conserved by this operation.
-      Pin::into_inner_unchecked(self.pin(val))
+    /// Creates a new `Slot` with the given pointer as its basis.
+    ///
+    /// To safely construct a `Slot`, use [`slot!()`].
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must not be outlived by any other pointers to its allocation.
+    ///
+    /// `drop_flag`'s value must be dead, and must be a drop flag governing
+    /// the destruction of `ptr`'s storage in an appropriate manner as described
+    /// in [`moveit2::drop_flag`][crate::drop_flag].
+    pub unsafe fn new_unchecked(
+        ptr: &'frame mut MaybeUninit<T>,
+        drop_flag: DropFlag<'frame>,
+    ) -> Self {
+        Self { ptr, drop_flag }
     }
-  }
 
-  /// Pin `val` into this slot, returning a new, pinned [`MoveRef`].
-  pub fn pin(self, val: T) -> Pin<MoveRef<'frame, T>> {
-    self.emplace(new::of(val))
-  }
-
-  /// Emplace `new` into this slot, returning a new, pinned [`MoveRef`].
-  pub fn emplace<N: New<Output = T>>(self, new: N) -> Pin<MoveRef<'frame, T>> {
-    match self.try_emplace(new) {
-      Ok(x) => x,
-      Err(e) => match e {},
+    /// Put `val` into this slot, returning a new [`MoveRef`].
+    pub fn put(self, val: T) -> MoveRef<'frame, T> {
+        unsafe {
+            // SAFETY: Pinning is conserved by this operation.
+            Pin::into_inner_unchecked(self.pin(val))
+        }
     }
-  }
 
-  /// Try to emplace `new` into this slot, returning a new, pinned [`MoveRef`].
-  pub fn try_emplace<N: TryNew<Output = T>>(
-    self,
-    new: N,
-  ) -> Result<Pin<MoveRef<'frame, T>>, N::Error> {
-    unsafe {
-      self.drop_flag.inc();
-      new.try_new(Pin::new_unchecked(self.ptr))?;
-      Ok(MoveRef::into_pin(MoveRef::new_unchecked(
-        self.ptr.assume_init_mut(),
-        self.drop_flag,
-      )))
+    /// Pin `val` into this slot, returning a new, pinned [`MoveRef`].
+    pub fn pin(self, val: T) -> Pin<MoveRef<'frame, T>> {
+        self.emplace(new::of(val))
     }
-  }
 
-  /// Converts this into a slot for a pinned `T`.
-  ///
-  /// This is safe, since this `Slot` owns the referenced data, and
-  /// `Pin` is explicitly a `repr(transparent)` type.
-  pub fn into_pinned(self) -> Slot<'frame, Pin<T>> {
-    unsafe { self.cast() }
-  }
-
-  /// Converts this `Slot` from being a slot for a `T` to being a slot for
-  /// some other type `U`.
-  ///
-  /// ```
-  /// # use moveit2::{Slot, MoveRef};
-  /// moveit2::slot!(place: u32);
-  /// let foo: MoveRef<u16> = unsafe { place.cast::<u16>() }.put(42);
-  /// ```
-  ///
-  /// # Safety
-  ///
-  /// `T` must have at least the size and alignment as `U`.
-  pub unsafe fn cast<U>(self) -> Slot<'frame, U> {
-    debug_assert!(mem::size_of::<T>() >= mem::size_of::<U>());
-    debug_assert!(mem::align_of::<T>() >= mem::align_of::<U>());
-    Slot {
-      ptr: unsafe { &mut *self.ptr.as_mut_ptr().cast() },
-      drop_flag: self.drop_flag,
+    /// Emplace `new` into this slot, returning a new, pinned [`MoveRef`].
+    pub fn emplace<N: New<Output = T>>(self, new: N) -> Pin<MoveRef<'frame, T>> {
+        match self.try_emplace(new) {
+            Ok(x) => x,
+            Err(e) => match e {},
+        }
     }
-  }
+
+    /// Try to emplace `new` into this slot, returning a new, pinned [`MoveRef`].
+    pub fn try_emplace<N: TryNew<Output = T>>(
+        self,
+        new: N,
+    ) -> Result<Pin<MoveRef<'frame, T>>, N::Error> {
+        unsafe {
+            self.drop_flag.inc();
+            new.try_new(Pin::new_unchecked(self.ptr))?;
+            Ok(MoveRef::into_pin(MoveRef::new_unchecked(
+                self.ptr.assume_init_mut(),
+                self.drop_flag,
+            )))
+        }
+    }
+
+    /// Converts this into a slot for a pinned `T`.
+    ///
+    /// This is safe, since this `Slot` owns the referenced data, and
+    /// `Pin` is explicitly a `repr(transparent)` type.
+    pub fn into_pinned(self) -> Slot<'frame, Pin<T>> {
+        unsafe { self.cast() }
+    }
+
+    /// Converts this `Slot` from being a slot for a `T` to being a slot for
+    /// some other type `U`.
+    ///
+    /// ```
+    /// # use moveit2::{Slot, MoveRef};
+    /// moveit2::slot!(place: u32);
+    /// let foo: MoveRef<u16> = unsafe { place.cast::<u16>() }.put(42);
+    /// ```
+    ///
+    /// # Safety
+    ///
+    /// `T` must have at least the size and alignment as `U`.
+    pub unsafe fn cast<U>(self) -> Slot<'frame, U> {
+        debug_assert!(mem::size_of::<T>() >= mem::size_of::<U>());
+        debug_assert!(mem::align_of::<T>() >= mem::align_of::<U>());
+        Slot {
+            ptr: unsafe { &mut *self.ptr.as_mut_ptr().cast() },
+            drop_flag: self.drop_flag,
+        }
+    }
 }
 
 impl<'frame, T> Slot<'frame, Pin<T>> {
-  /// Converts this into a slot for an unpinned `T`.
-  ///
-  /// This is safe, since this `Slot` owns the referenced data, and
-  /// `Pin` is explicitly a `repr(transparent)` type.
-  ///
-  /// Moreover, no actual unpinning is occurring: the referenced data must
-  /// be uninitialized, so it cannot have a pinned referent.
-  pub fn into_unpinned(self) -> Slot<'frame, T> {
-    unsafe { self.cast() }
-  }
+    /// Converts this into a slot for an unpinned `T`.
+    ///
+    /// This is safe, since this `Slot` owns the referenced data, and
+    /// `Pin` is explicitly a `repr(transparent)` type.
+    ///
+    /// Moreover, no actual unpinning is occurring: the referenced data must
+    /// be uninitialized, so it cannot have a pinned referent.
+    pub fn into_unpinned(self) -> Slot<'frame, T> {
+        unsafe { self.cast() }
+    }
 }
 
 /// Similar to a [`Slot`], but able to drop its contents.
@@ -200,133 +200,131 @@ impl<'frame, T> Slot<'frame, Pin<T>> {
 /// provides `DroppingSlot` support, too. These slots will silently forget their
 /// contents if the drop flag is left untouched, rather than crash.
 pub struct DroppingSlot<'frame, T> {
-  ptr: &'frame mut MaybeUninit<T>,
-  drop_flag: DropFlag<'frame>,
+    ptr: &'frame mut MaybeUninit<T>,
+    drop_flag: DropFlag<'frame>,
 }
 
 impl<'frame, T> DroppingSlot<'frame, T> {
-  /// Creates a new `DroppingSlot` with the given pointer as its basis.
-  ///
-  /// To safely construct a `DroppingSlot`, use [`slot!()`].
-  ///
-  /// # Safety
-  ///
-  /// `ptr` must not be outlived by any other pointers to its allocation.
-  ///
-  /// `drop_flag`'s value must be dead, and must be a drop flag governing
-  /// the destruction of `ptr`'s storage in an appropriate manner as described
-  /// in [`moveit2::drop_flag`][crate::drop_flag].
-  pub unsafe fn new_unchecked(
-    ptr: &'frame mut MaybeUninit<T>,
-    drop_flag: DropFlag<'frame>,
-  ) -> Self {
-    drop_flag.inc();
-    Self { ptr, drop_flag }
-  }
-
-  /// Put `val` into this slot, returning a reference to it.
-  pub fn put(self, val: T) -> (&'frame mut T, DropFlag<'frame>) {
-    ({ self.ptr }.write(val), self.drop_flag)
-  }
-
-  /// Pin `val` into this slot, returning a reference to it.
-  ///
-  /// # Safety
-  ///
-  /// This function pins the memory this slot wraps, but does not guarantee its
-  /// destructor is run; that is the caller's responsibility, by decrementing
-  /// the given [`DropFlag`].
-  pub unsafe fn pin(self, val: T) -> (Pin<&'frame mut T>, DropFlag<'frame>) {
-    unsafe { self.emplace(new::of(val)) }
-  }
-
-  /// Emplace `new` into this slot, returning a reference to it.
-  ///
-  /// # Safety
-  ///
-  /// This function pins the memory this slot wraps, but does not guarantee its
-  /// destructor is run; that is the caller's responsibility, by decrementing
-  /// the given [`DropFlag`].
-  pub unsafe fn emplace<N: New<Output = T>>(
-    self,
-    new: N,
-  ) -> (Pin<&'frame mut T>, DropFlag<'frame>) {
-    match unsafe { self.try_emplace(new) } {
-      Ok((x, d)) => (x, d),
-      Err(e) => match e {},
+    /// Creates a new `DroppingSlot` with the given pointer as its basis.
+    ///
+    /// To safely construct a `DroppingSlot`, use [`slot!()`].
+    ///
+    /// # Safety
+    ///
+    /// `ptr` must not be outlived by any other pointers to its allocation.
+    ///
+    /// `drop_flag`'s value must be dead, and must be a drop flag governing
+    /// the destruction of `ptr`'s storage in an appropriate manner as described
+    /// in [`moveit2::drop_flag`][crate::drop_flag].
+    pub unsafe fn new_unchecked(
+        ptr: &'frame mut MaybeUninit<T>,
+        drop_flag: DropFlag<'frame>,
+    ) -> Self {
+        drop_flag.inc();
+        Self { ptr, drop_flag }
     }
-  }
 
-  /// Try to emplace `new` into this slot, returning a reference to it.
-  ///
-  /// # Safety
-  ///
-  /// This function pins the memory this slot wraps, but does not guarantee its
-  /// destructor is run; that is the caller's responsibility, by decrementing
-  /// the given [`DropFlag`].
-  pub unsafe fn try_emplace<N: TryNew<Output = T>>(
-    self,
-    new: N,
-  ) -> Result<(Pin<&'frame mut T>, DropFlag<'frame>), N::Error> {
-    self.drop_flag.inc();
-    unsafe {
-      new.try_new(Pin::new_unchecked(self.ptr))?;
-      Ok((
-        Pin::new_unchecked(self.ptr.assume_init_mut()),
-        self.drop_flag,
-      ))
+    /// Put `val` into this slot, returning a reference to it.
+    pub fn put(self, val: T) -> (&'frame mut T, DropFlag<'frame>) {
+        ({ self.ptr }.write(val), self.drop_flag)
     }
-  }
+
+    /// Pin `val` into this slot, returning a reference to it.
+    ///
+    /// # Safety
+    ///
+    /// This function pins the memory this slot wraps, but does not guarantee its
+    /// destructor is run; that is the caller's responsibility, by decrementing
+    /// the given [`DropFlag`].
+    pub unsafe fn pin(self, val: T) -> (Pin<&'frame mut T>, DropFlag<'frame>) {
+        unsafe { self.emplace(new::of(val)) }
+    }
+
+    /// Emplace `new` into this slot, returning a reference to it.
+    ///
+    /// # Safety
+    ///
+    /// This function pins the memory this slot wraps, but does not guarantee its
+    /// destructor is run; that is the caller's responsibility, by decrementing
+    /// the given [`DropFlag`].
+    pub unsafe fn emplace<N: New<Output = T>>(
+        self,
+        new: N,
+    ) -> (Pin<&'frame mut T>, DropFlag<'frame>) {
+        match unsafe { self.try_emplace(new) } {
+            Ok((x, d)) => (x, d),
+            Err(e) => match e {},
+        }
+    }
+
+    /// Try to emplace `new` into this slot, returning a reference to it.
+    ///
+    /// # Safety
+    ///
+    /// This function pins the memory this slot wraps, but does not guarantee its
+    /// destructor is run; that is the caller's responsibility, by decrementing
+    /// the given [`DropFlag`].
+    pub unsafe fn try_emplace<N: TryNew<Output = T>>(
+        self,
+        new: N,
+    ) -> Result<(Pin<&'frame mut T>, DropFlag<'frame>), N::Error> {
+        self.drop_flag.inc();
+        unsafe {
+            new.try_new(Pin::new_unchecked(self.ptr))?;
+            Ok((
+                Pin::new_unchecked(self.ptr.assume_init_mut()),
+                self.drop_flag,
+            ))
+        }
+    }
 }
 
 #[doc(hidden)]
 #[allow(missing_docs)]
 pub mod __macro {
-  use super::*;
-  use crate::drop_flag::QuietFlag;
-  pub use core;
+    use super::*;
+    use crate::drop_flag::QuietFlag;
+    pub use core;
 
-  pub struct SlotDropper<T> {
-    val: MaybeUninit<T>,
-    drop_flag: QuietFlag,
-  }
+    pub struct SlotDropper<T> {
+        val: MaybeUninit<T>,
+        drop_flag: QuietFlag,
+    }
 
-  impl<T> SlotDropper<T> {
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
-      Self {
-        val: MaybeUninit::uninit(),
-        drop_flag: QuietFlag::new(),
-      }
+    impl<T> SlotDropper<T> {
+        #[allow(clippy::new_without_default)]
+        pub fn new() -> Self {
+            Self {
+                val: MaybeUninit::uninit(),
+                drop_flag: QuietFlag::new(),
+            }
+        }
+
+        // Workaround for `unsafe {}` unhygine wrt to lints.
+        //
+        // This function is still `unsafe`.
+        pub fn new_unchecked_hygine_hack(&mut self) -> DroppingSlot<'_, T> {
+            unsafe { DroppingSlot::new_unchecked(&mut self.val, self.drop_flag.flag()) }
+        }
+    }
+
+    impl<T> Drop for SlotDropper<T> {
+        fn drop(&mut self) {
+            if self.drop_flag.flag().is_dead() {
+                unsafe { ptr::drop_in_place(self.val.assume_init_mut()) }
+            }
+        }
     }
 
     // Workaround for `unsafe {}` unhygine wrt to lints.
     //
     // This function is still `unsafe`.
-    pub fn new_unchecked_hygine_hack(&mut self) -> DroppingSlot<'_, T> {
-      unsafe {
-        DroppingSlot::new_unchecked(&mut self.val, self.drop_flag.flag())
-      }
+    pub fn new_unchecked_hygine_hack<'frame, T>(
+        ptr: &'frame mut MaybeUninit<T>,
+        drop_flag: DropFlag<'frame>,
+    ) -> Slot<'frame, T> {
+        unsafe { Slot::new_unchecked(ptr, drop_flag) }
     }
-  }
-
-  impl<T> Drop for SlotDropper<T> {
-    fn drop(&mut self) {
-      if self.drop_flag.flag().is_dead() {
-        unsafe { ptr::drop_in_place(self.val.assume_init_mut()) }
-      }
-    }
-  }
-
-  // Workaround for `unsafe {}` unhygine wrt to lints.
-  //
-  // This function is still `unsafe`.
-  pub fn new_unchecked_hygine_hack<'frame, T>(
-    ptr: &'frame mut MaybeUninit<T>,
-    drop_flag: DropFlag<'frame>,
-  ) -> Slot<'frame, T> {
-    unsafe { Slot::new_unchecked(ptr, drop_flag) }
-  }
 }
 
 /// Constructs a new [`Slot`].
