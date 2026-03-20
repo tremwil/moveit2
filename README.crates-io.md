@@ -15,7 +15,7 @@ bumped as part of minor releases; it is not part of semver.
 
 ## How It Works
 
-`moveit` revolves around `unsafe trait`s that impose additional guarantees
+`moveit2` revolves around `unsafe trait`s that impose additional guarantees
 on `!Unpin` types, such that they can be moved in the C++ sense. There are
 two senses of "move" frequently used:
 - The Rust sense, which is a blind memcpy and analogous-ish to the
@@ -125,7 +125,7 @@ should return `impl New` instead. This is analogous to have `async fn`s and
 ## Emplacement
 
 The example above makes use of the [`moveit!()`] macro, one of many ways to
-turn a constructor into a value. `moveit` gives you two choices for running
+turn a constructor into a value. `moveit2` gives you two choices for running
 a constructor:
 - On the stack, using the [`MoveRef`] type (this is what [`moveit!()`]
   generates).

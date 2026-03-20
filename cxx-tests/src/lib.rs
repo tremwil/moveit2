@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Tests for `cxx` support in `moveit`. This is a separate crate because
+//! Tests for `cxx` support in `moveit2`. This is a separate crate because
 //! these tests require linking C++ code in a `build.rs`, which we do not
-//! want to apply to normal users of `moveit`.
+//! want to apply to normal users of `moveit2`.
 
 #[cfg(test)]
 mod tests;

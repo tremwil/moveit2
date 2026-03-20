@@ -130,7 +130,7 @@
 //! # Emplacement
 //!
 //! The example above makes use of the [`moveit!()`] macro, one of many ways to
-//! turn a constructor into a value. `moveit` gives you two choices for running
+//! turn a constructor into a value. `moveit2` gives you two choices for running
 //! a constructor:
 //! - On the stack, using the [`MoveRef`] type (this is what [`moveit!()`]
 //!   generates).
