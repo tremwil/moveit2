@@ -173,3 +173,25 @@ pub use crate::{
 
 #[cfg(feature = "cxx")]
 pub use cxx_support::MakeCppStorage;
+
+#[cfg(test)]
+mod miri_util {
+    /// Check if miri is checking aliasing rules with stack borrows.
+    ///
+    /// Some tests that manually deallocate Box memory to avoid miri reporting leaks
+    /// do not pass Stacked Borrows due to strict rules around around raw pointer tag
+    /// invalidations, despite being sound under Tree Borrows.
+    #[allow(clippy::needless_return)]
+    pub(crate) fn stacked_borrows_enabled() -> bool {
+        #[cfg(not(miri))]
+        return false;
+        #[cfg(miri)]
+        return match option_env!("MIRIFLAGS") {
+            None => true,
+            Some(flags) => {
+                !flags.contains("-Zmiri-disable-stacked-borrows")
+                    && !flags.contains("-Zmiri-tree-borrows")
+            }
+        };
+    }
+}

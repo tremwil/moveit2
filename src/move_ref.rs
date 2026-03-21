@@ -577,20 +577,22 @@ macro_rules! moveit {
 
 #[cfg(test)]
 pub(crate) mod test {
-    use std::boxed::Box;
-
     use crate::MoveNew;
     use crate::New;
     use crate::new;
 
     #[cfg(feature = "alloc")]
-    use alloc::{Layout, alloc};
+    use core::alloc::Layout;
+
+    #[cfg(feature = "alloc")]
+    use crate::alloc::{alloc, boxed::Box};
 
     use super::*;
-    use std::marker::PhantomPinned;
-    use std::mem::MaybeUninit;
+    use core::marker::PhantomPinned;
+    use core::mem::MaybeUninit;
 
     #[test]
+    #[cfg(feature = "alloc")]
     fn deref_move_of_move_ref() {
         moveit! {
           let x: MoveRef<Box<i32>> = &move Box::new(5);
@@ -629,12 +631,19 @@ pub(crate) mod test {
     #[test]
     #[cfg(feature = "alloc")]
     fn forgettable_box() {
+        // the alloc cleanup in this test is not valid under stack borrows due to ptr's
+        // tag being invalidated by the deref move under Stacked Borrows!
+        if crate::miri_util::stacked_borrows_enabled() {
+            return;
+        }
+
         let mut x = Box::new(5);
 
         // Save the pointer for later, so that we can free it to make Miri happy.
-        let ptr = x.as_mut() as *mut i32;
+        let ptr = &raw mut *x;
 
-        moveit!(let y: MoveRef<i32> = &move *x);
+        moveit!(let mut y = &move *x);
+        assert_eq!(ptr, &raw mut *y);
 
         // This should leak but be otherwise safe.
         mem::forget(y);
@@ -649,6 +658,12 @@ pub(crate) mod test {
     #[test]
     #[cfg(feature = "alloc")]
     fn forgettable_box_temporary() {
+        // the alloc cleanup in this test is not valid under stack borrows due to ptr's
+        // tag being invalidated by the deref move under Stacked Borrows!
+        if crate::miri_util::stacked_borrows_enabled() {
+            return;
+        }
+
         let mut x = Box::new(5);
 
         // Save the pointer for later, so that we can free it to make Miri happy.
