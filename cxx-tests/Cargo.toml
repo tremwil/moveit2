@@ -16,8 +16,8 @@
 name = "moveit-cxx-tests"
 version = "0.0.0"
 authors = ["Miguel Young de la Sota <mcyoung@google.com>"]
-edition = "2024"
-repository = "https://github.com/tremwil/moveit2"
+edition.workspace = true
+repository.workspace = true
 publish = false
 
 [dependencies]

@@ -159,6 +159,9 @@ mod alloc_support;
 #[cfg(feature = "cxx")]
 mod cxx_support;
 
+#[cfg(feature = "ctor")]
+mod ctor;
+
 pub mod drop_flag;
 pub mod move_ref;
 pub mod new;
