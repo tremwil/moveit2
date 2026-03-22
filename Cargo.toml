@@ -51,6 +51,9 @@ version = "0.1.0"
 optional = true
 path = "moveit2-proc-macros"
 
+[dev-dependencies]
+pin-project = "1.1.11"
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
