@@ -97,6 +97,7 @@ struct Context {
     ident: syn::Ident,
     builder_ident: syn::Ident,
     ctor_lt: syn::Lifetime,
+    struct_generics: syn::Generics,
     base_generics: syn::Generics,
     builder_generics: syn::Generics,
     fields: Vec<BuilderField>,
@@ -143,7 +144,8 @@ impl Context {
             .map(|(i, f)| BuilderField::new(i, f))
             .collect();
 
-        let mut base_generics = input.generics;
+        let struct_generics = input.generics;
+        let mut base_generics = struct_generics.clone();
         base_generics.params.insert(
             0,
             syn::GenericParam::Lifetime(syn::LifetimeParam::new(ctor_lt.clone())),
@@ -161,6 +163,7 @@ impl Context {
             ident,
             builder_ident,
             ctor_lt,
+            struct_generics,
             base_generics,
             builder_generics,
             fields,
@@ -255,6 +258,39 @@ impl Context {
         }
     }
 
+    fn ctor_impl(&self) -> TokenStream2 {
+        let (s_impl, s_ty, s_where) = self.struct_generics.split_for_impl();
+        let s_ident = &self.ident;
+        let vis = &self.vis;
+
+        let macro_ident = format_ident!("{IMPL_TY_MACRO}0");
+
+        let base_tys: Vec<_> = self
+            .base_generics
+            .params
+            .iter()
+            .map(|t| match t {
+                syn::GenericParam::Const(c) => c.ident.to_token_stream(),
+                syn::GenericParam::Lifetime(lt) => lt.lifetime.to_token_stream(),
+                syn::GenericParam::Type(ty) => ty.ident.to_token_stream(),
+            })
+            .collect();
+
+        let init_markers = (0..self.fields.len()).map(|_| quote!(::moveit2::ctor::Init));
+        let builder_ident = &self.builder_ident;
+
+        quote! {
+            impl #s_impl #s_ident #s_ty #s_where {
+                #vis fn ctor<__F>(f: __F) -> impl ::moveit2::New<Output = Self> where
+                    __F: for<'__ctor> FnOnce(#builder_ident<#(#base_tys,)*>) ->
+                    #macro_ident!([#(#base_tys,)*] #(#init_markers,)*)
+                {
+                    todo!()
+                }
+            }
+        }
+    }
+
     fn generate(self) -> TokenStream2 {
         let builder_ident = &self.builder_ident;
         let marker_defs = self.marker_defs();
@@ -266,6 +302,7 @@ impl Context {
         let where_clause = &generics.where_clause;
 
         let builder_methods = (0..self.fields.len()).map(|i| self.builder_method(i));
+        let ctor_impl = self.ctor_impl();
 
         quote! {
             const _: () = {
@@ -281,6 +318,8 @@ impl Context {
                 }
 
                 #(#builder_methods)*
+
+                #ctor_impl
             };
         }
     }

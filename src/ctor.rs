@@ -1,7 +1,6 @@
 //! Flexible proc-macro in-place construction.
 
 use core::{
-    cell::Cell,
     marker::PhantomData,
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
@@ -9,7 +8,7 @@ use core::{
     ptr::NonNull,
 };
 
-use crate::{New, TryNew};
+use crate::{New, TryNew, drop_flag::DropFlag};
 
 #[doc(inline)]
 pub use moveit2_proc_macros::ctor;
@@ -68,7 +67,7 @@ use __private::IsInit;
 /// `I` acts as a proof of (un)initialization.
 pub struct MaybeInit<'a, T, I: IsInit> {
     ptr: NonNull<T>,
-    init_counter: &'a Cell<usize>,
+    drop_flag: DropFlag<'a>,
     #[allow(clippy::type_complexity)]
     phantom: PhantomData<(&'a mut (), fn() -> I, T)>,
 }
@@ -76,7 +75,7 @@ pub struct MaybeInit<'a, T, I: IsInit> {
 impl<T, I: IsInit> Drop for MaybeInit<'_, T, I> {
     fn drop(&mut self) {
         if I::INIT {
-            self.init_counter.update(|c| c - 1);
+            self.drop_flag.dec_and_check_if_died();
             unsafe { core::ptr::drop_in_place(self.ptr.as_ptr()) }
         }
     }
@@ -101,11 +100,11 @@ impl<'a, T, I: UninitMarker> MaybeInit<'a, T, I> {
     ///
     /// `ptr` memory must be fresh uninitialized memory.
     #[doc(hidden)]
-    pub const unsafe fn new(ptr: *mut T, ctr: &'a Cell<usize>) -> Pin<Self> {
+    pub const unsafe fn new(ptr: *mut T, drop_flag: DropFlag<'a>) -> Pin<Self> {
         unsafe {
             Pin::new_unchecked(Self {
                 ptr: NonNull::new_unchecked(ptr),
-                init_counter: ctr,
+                drop_flag,
                 phantom: PhantomData,
             })
         }
@@ -121,10 +120,13 @@ impl<'a, T, I: UninitMarker> MaybeInit<'a, T, I> {
             let slot = Pin::new_unchecked(this.ptr.cast::<MaybeUninit<T>>().as_mut());
             ctor.try_new(slot)?;
 
-            this.init_counter.update(|c| c.strict_add(1));
+            // SAFETY: technically unguarded, but would require a struct with usize::MAX fields
+            // to break.
+            this.drop_flag.inc();
+
             Ok(Pin::new_unchecked(MaybeInit {
                 ptr: this.ptr,
-                init_counter: this.init_counter,
+                drop_flag: this.drop_flag,
                 phantom: PhantomData,
             }))
         }
