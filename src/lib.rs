@@ -160,7 +160,7 @@ mod alloc_support;
 mod cxx_support;
 
 #[cfg(feature = "ctor")]
-mod ctor;
+pub mod ctor;
 
 pub mod drop_flag;
 pub mod move_ref;
@@ -173,6 +173,10 @@ pub use crate::{
     new::{CopyNew, Emplace, MoveNew, New, TryNew},
     slot::Slot,
 };
+
+#[cfg(feature = "ctor")]
+#[doc(inline)]
+pub use ctor::ctor;
 
 #[cfg(feature = "cxx")]
 pub use cxx_support::MakeCppStorage;
