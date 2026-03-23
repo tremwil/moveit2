@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use core::convert::Infallible;
 use core::convert::TryFrom;
 use core::convert::TryInto;
 use core::marker::PhantomData;
@@ -40,14 +41,19 @@ where
         _ph: PhantomData<fn(T)>,
     }
 
-    unsafe impl<F, T> New for FnNew<F, T>
+    unsafe impl<F, T> TryNew for FnNew<F, T>
     where
         F: FnOnce(Pin<&mut MaybeUninit<T>>),
     {
         type Output = T;
-        #[inline]
-        unsafe fn new(self, this: Pin<&mut MaybeUninit<Self::Output>>) {
-            (self.f)(this)
+        type Error = Infallible;
+
+        unsafe fn try_new(
+            self,
+            this: Pin<&mut MaybeUninit<Self::Output>>,
+        ) -> Result<(), Self::Error> {
+            (self.f)(this);
+            Ok(())
         }
     }
 

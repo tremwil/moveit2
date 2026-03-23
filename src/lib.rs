@@ -71,7 +71,7 @@
 //! use std::ptr::NonNull;
 //!
 //! use moveit2::new;
-//! use moveit2::new::New;
+//! use moveit2::new::{New, TryNew};
 //! use moveit2::moveit;
 //!
 //! // This is a self-referential struct because the slice field points to the
