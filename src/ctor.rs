@@ -14,9 +14,112 @@ pub use moveit2_proc_macros::Ctor;
 
 #[doc(hidden)]
 pub mod __private {
+    use core::cell::Cell;
+
     pub use core::convert::Infallible;
+    pub use core::marker::PhantomData;
     pub use core::mem::forget;
     pub use core::pin::Pin;
+
+    use crate::ctor::{PinInit, Uninit};
+    use crate::{New, TryNew};
+
+    // The types below are used for autoref specialization in `ctor` and `try_ctor` macros
+    // This allows picking out the right impl for the user-provided type
+    //
+    // Reference:
+    //
+    // https://lukaskalbertodt.github.io/2019/12/05/generalized-autoref-based-specialization.html
+
+    pub struct CtorSpec<'a, T, F, U>(Cell<Option<(Uninit<'a, T, F>, U)>>);
+
+    impl<'a, T, F, U> CtorSpec<'a, T, F, U> {
+        #[inline]
+        pub fn new(uninit: Uninit<'a, T, F>, src: U) -> Self {
+            Self(Cell::new(Some((uninit, src))))
+        }
+    }
+
+    pub trait ViaEmplace<'a, T, F> {
+        fn init(&self) -> PinInit<'a, T, F>;
+    }
+
+    impl<'a, T, F, U> ViaEmplace<'a, T, F> for &CtorSpec<'a, T, F, U>
+    where
+        U: New<Output = T>,
+    {
+        #[inline]
+        fn init(&self) -> PinInit<'a, T, F> {
+            let (uninit, new) = self.0.take().unwrap();
+            uninit.emplace(new)
+        }
+    }
+
+    pub trait ViaPut<'a, T, F> {
+        fn init(&self) -> PinInit<'a, T, F>;
+    }
+
+    impl<'a, T, F> ViaPut<'a, T, F> for CtorSpec<'a, T, F, T> {
+        #[inline]
+        fn init(&self) -> PinInit<'a, T, F> {
+            let (uninit, val) = self.0.take().unwrap();
+            uninit.put(val)
+        }
+    }
+
+    pub struct TryCtorSpec<'a, T, F, U, E> {
+        assign_pair: Cell<Option<(Uninit<'a, T, F>, U)>>,
+        phantom: PhantomData<fn() -> E>,
+    }
+
+    impl<'a, T, F, U, E> TryCtorSpec<'a, T, F, U, E> {
+        #[inline]
+        pub fn new(uninit: Uninit<'a, T, F>, src: U) -> Self {
+            Self {
+                assign_pair: Cell::new(Some((uninit, src))),
+                phantom: PhantomData,
+            }
+        }
+    }
+
+    pub trait TryViaEmplace<'a, T, F, E> {
+        fn try_init(&self) -> Result<PinInit<'a, T, F>, E>;
+    }
+    impl<'a, T, F, U, E> TryViaEmplace<'a, T, F, E> for &&TryCtorSpec<'a, T, F, U, E>
+    where
+        U: New<Output = T>,
+    {
+        #[inline]
+        fn try_init(&self) -> Result<PinInit<'a, T, F>, E> {
+            let (uninit, new) = self.assign_pair.take().unwrap();
+            Ok(uninit.emplace(new))
+        }
+    }
+
+    pub trait TryViaTryEmplace<'a, T, F, E> {
+        fn try_init(&self) -> Result<PinInit<'a, T, F>, E>;
+    }
+    impl<'a, T, F, U, E> TryViaTryEmplace<'a, T, F, E> for &TryCtorSpec<'a, T, F, U, E>
+    where
+        U: TryNew<Output = T, Error: Into<E>>,
+    {
+        #[inline]
+        fn try_init(&self) -> Result<PinInit<'a, T, F>, E> {
+            let (uninit, new) = self.assign_pair.take().unwrap();
+            uninit.try_emplace(new).map_err(Into::into)
+        }
+    }
+
+    pub trait TryViaPut<'a, T, F, E> {
+        fn try_init(&self) -> Result<PinInit<'a, T, F>, E>;
+    }
+    impl<'a, T, F, E> TryViaPut<'a, T, F, E> for TryCtorSpec<'a, T, F, T, E> {
+        #[inline]
+        fn try_init(&self) -> Result<PinInit<'a, T, F>, E> {
+            let (uninit, val) = self.assign_pair.take().unwrap();
+            Ok(uninit.put(val))
+        }
+    }
 }
 
 /// Trait implemented on struct types that can be in-place constructed field by field.
@@ -86,6 +189,7 @@ impl<'a, T, F> Uninit<'a, T, F> {
     ///   have been forgotten. In this situation the program *must* abort to avoid violating [`Pin`]
     ///   obligations.
     #[doc(hidden)]
+    #[inline]
     pub unsafe fn new_unchecked(slot: *mut T, drop_flag: DropFlag<'a>) -> Self {
         Self {
             slot: unsafe { &mut *slot.cast() },
@@ -95,6 +199,7 @@ impl<'a, T, F> Uninit<'a, T, F> {
     }
 
     /// Initialize this slot by moving a value into it.
+    #[inline]
     pub fn put(self, value: T) -> PinInit<'a, T, F> {
         self.slot.write(value);
         self.drop_flag.inc();
@@ -106,11 +211,13 @@ impl<'a, T, F> Uninit<'a, T, F> {
     }
 
     /// Initialize this slot by constructing a value inside of it.
+    #[inline]
     pub fn emplace(self, new: impl New<Output = T>) -> PinInit<'a, T, F> {
         self.try_emplace(new).unwrap_or_else(|e| match e {})
     }
 
     /// Try to initialize this struct by constructing a value inside of it.
+    #[inline]
     pub fn try_emplace<N>(self, new: N) -> Result<PinInit<'a, T, F>, N::Error>
     where
         N: TryNew<Output = T>,
@@ -164,3 +271,172 @@ impl<'a, T, F> Drop for Init<'a, T, F> {
         self.0.drop_flag.dec_and_check_if_died();
     }
 }
+
+/// Create a [`New`] implementation for initializing a struct field by field.
+///
+/// The struct must implemented [`Ctor`] through the derive macro for this to work.
+#[macro_export]
+macro_rules! ctor {
+    ($struct:ty { $($tokens:tt)* }) => {
+        $crate::ctor!(|__fields| $struct {
+            $($tokens)*
+        })
+    };
+
+    (|$fields:ident| $struct:ty {
+            $($field:ident $(:$expr:expr)?),*
+            $(,)?
+    }) => {
+        <$struct>::ctor(|$fields| {
+            use $crate::ctor::__private::{
+                ViaEmplace as _,
+                ViaPut as _
+            };
+
+            $(
+                $crate::ctor!(__assign_field[$fields]($field $(:$expr)?));
+            )*
+
+            $crate::ctor::InitProof::<$struct> {
+                $($field),*
+            }
+        })
+    };
+
+    ({ $($tokens:tt)* }) => {
+        $crate::ctor!(|__fields| { $($tokens)* })
+    };
+
+    (|$fields:ident| { $($tokens:tt)* }) => {
+        $crate::ctor!(__gather_stmt[$fields]{}{ $($tokens)* })
+    };
+
+    (__gather_stmt[$fields:ident]{ $($statements:stmt)* }{
+        $struct:ty {
+            $($field:ident $(:$expr:expr)?),*
+            $(,)?
+        }
+    }) => {
+        <$struct>::ctor(|$fields| {
+            $($statements;)*
+
+            use $crate::ctor::__private::{
+                ViaEmplace as _,
+                ViaPut as _
+            };
+
+            $(
+                $crate::ctor!(__assign_field[$fields]($field $(:$expr)?));
+            )*
+
+            $crate::ctor::InitProof::<$struct> {
+                $($field),*
+            }
+        })
+    };
+
+    (__gather_stmt[$fields:ident]{ $($statements:stmt)* }{
+        $stmt:stmt;
+        $($tokens:tt)*
+    }) => {
+        $crate::ctor!(__gather_stmt[$fields]{$($statements;)* $stmt; }{ $($tokens)* })
+    };
+
+    (__assign_field[$fields:ident]($field:ident)) => {
+        let mut $field = (&&$crate::ctor::__private::CtorSpec::new($fields.$field, $field)).init();
+    };
+
+    (__assign_field[$fields:ident]($field:ident: $expr:expr)) => {
+        let mut $field = (&&$crate::ctor::__private::CtorSpec::new($fields.$field, $expr)).init();
+    };
+}
+
+#[doc(inline)]
+pub use ctor;
+
+/// Create a [`TryNew`] implementation for initializing a struct field by field.
+///
+/// The struct must implemented [`Ctor`] through the derive macro for this to work.
+#[macro_export]
+macro_rules! try_ctor {
+    ($err:ty, $struct:ty { $($tokens:tt)* }) => {
+        $crate::try_ctor!($err, |__fields| $struct {
+            $($tokens)*
+        })
+    };
+    ($err:ty, |$fields:ident| $struct:ty {
+            $($field:ident $(:$expr:expr)?),*
+            $(,)?
+    }) => {
+        <$struct>::try_ctor::<_, $err>(|$fields| {
+            use $crate::ctor::__private::{
+                TryViaTryEmplace as _,
+                TryViaEmplace as _,
+                TryViaPut as _
+            };
+
+            $(
+                $crate::try_ctor!(__try_assign_field[$err, $fields]($field $(:$expr)?));
+            )*
+
+            Ok($crate::ctor::InitProof::<$struct> {
+                $($field),*
+            })
+        })
+    };
+
+    ($err:ty, { $($tokens:tt)* }) => {
+        $crate::try_ctor!($err:ty, |__fields| { $($tokens)* })
+    };
+
+    ($err:ty, |$fields:ident| { $($tokens:tt)* }) => {
+        $crate::try_ctor!(__gather_stmt[$err, $fields]{}{ $($tokens)* })
+    };
+
+    (__gather_stmt[$err:ty, $fields:ident]{ $($statements:stmt)* }{
+        $struct:ty {
+            $($field:ident $(:$expr:expr)?),*
+            $(,)?
+        }
+    }) => {
+        <$struct>::try_ctor::<_, $err>(|$fields| {
+            $($statements;)*
+
+            use $crate::ctor::__private::{
+                TryViaTryEmplace as _,
+                TryViaEmplace as _,
+                TryViaPut as _
+            };
+
+            $(
+                $crate::try_ctor!(__try_assign_field[$err, $fields]($field $(:$expr)?));
+            )*
+
+            Ok($crate::ctor::InitProof::<$struct> {
+                $($field),*
+            })
+        })
+    };
+
+    (__gather_stmt[$err:ty, $fields:ident]{ $($statements:stmt)* }{
+        $stmt:stmt;
+        $($tokens:tt)*
+    }) => {
+        $crate::try_ctor!(__gather_stmt[$err, $fields]{$($statements;)* $stmt; }{ $($tokens)* })
+    };
+
+    (__try_assign_field[$err:ty, $fields:ident]($field:ident)) => {
+        let mut $field = (
+            &&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new($fields.$field, $field)
+        ).try_init()?;
+    };
+
+    (__try_assign_field[$err:ty, $fields:ident]($field:ident: $expr:expr)) => {
+        let mut $field = (
+            &&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new($fields.$field, $expr)
+        ).try_init()?;
+    };
+}
+
+#[doc(inline)]
+pub use try_ctor;

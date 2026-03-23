@@ -1,4 +1,4 @@
-use moveit2::{Ctor, InitProof, New};
+use moveit2::{Ctor, Emplace, InitProof, New, ctor};
 use pin_project::pin_project;
 
 #[derive(Ctor)]
@@ -9,15 +9,6 @@ pub struct SelfReferential<T> {
     addr_of_val: *mut T,
 }
 
-// impl<T> SelfReferential<T> {
-//     pub fn construct(val_ctor: impl New<Output = T>) -> impl New<Output = Self> {
-//         Self::ctor(|b| {
-//             let addr = b.val.as_ptr().cast_mut();
-//             b.val(val_ctor).addr_of_val(new::of(addr))
-//         })
-//     }
-// }
-
 impl<T> SelfReferential<T> {
     pub fn construct(val_ctor: impl New<Output = T>) -> impl New<Output = Self> {
         Self::ctor(|fields| InitProof::<Self> {
@@ -27,35 +18,14 @@ impl<T> SelfReferential<T> {
     }
 }
 
-// macro_rules! init {
-//     ($s:ty {
-//         $($field:ident: $e:expr),*
-//         $(,)?
-//     }) => {
-//         <$s>::ctor(|__fields| InitProof::<$s> {
-//             $($field: __fields.$field.emplace($e)),*
-//         })
-//     };
-// }
+#[test]
+fn basic_construction() {
+    let self_ref = Box::emplace(ctor!(|fields| {
+        SelfReferential::<_> {
+            val: "abcdef",
+            addr_of_val: &raw mut *val,
+        }
+    }));
 
-// macro_rules! _init_block {
-//     () => {
-
-//     };
-// }
-
-// fn test(val_ctor: impl New<Output = usize>) {
-//     let s = Box::emplace(init!(SelfReferential<_> {
-//         val: val_ctor,
-//         addr_of_val: new::of(null_mut())
-//     }));
-// }
-
-// fn test(x: impl TryNew<Output = usize, Error = usize>) -> impl TryNew<Output = usize> {
-//     let n = x.with(|val| match val.is_multiple_of(2) {
-//         true => Ok(()),
-//         false => Err(*val),
-//     });
-
-//     n
-// }
+    assert_eq!(&raw const self_ref.val, self_ref.addr_of_val);
+}
