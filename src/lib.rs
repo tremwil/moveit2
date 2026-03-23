@@ -176,7 +176,7 @@ pub use crate::{
 
 #[cfg(feature = "ctor")]
 #[doc(inline)]
-pub use ctor::ctor;
+pub use ctor::{Ctor, InitProof};
 
 #[cfg(feature = "cxx")]
 pub use cxx_support::MakeCppStorage;

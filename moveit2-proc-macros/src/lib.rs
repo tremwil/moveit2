@@ -6,10 +6,8 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{ToTokens, format_ident, quote};
 use syn::parse_quote;
 
-mod cfg_helpers;
+mod attr_helpers;
 mod vis_helpers;
-
-const IMPL_TY_MACRO: &str = "__moveit2_ctor_impl_ty";
 
 fn spanned_error<T, U, Ok>(tokens: T, message: U) -> syn::Result<Ok>
 where
@@ -20,86 +18,63 @@ where
 }
 
 struct BuilderField {
-    index: usize,
     field: syn::Field,
-    ty_ident: syn::Ident,
     marker_ident: syn::Ident,
-    doc_attrs: Vec<syn::Attribute>,
-    cfg: Option<syn::Meta>,
-    ty_param: syn::TypeParam,
 }
 
 impl BuilderField {
-    pub fn new(index: usize, field: syn::Field) -> Self {
+    pub fn new(mut field: syn::Field) -> Self {
         let ident = field.ident.as_ref().unwrap();
         let ident_pascal = ident.to_string().to_pascal_case();
-        let marker_ident = syn::Ident::new(&format!("__{ident_pascal}IsUninit"), ident.span());
-        let ty_ident = syn::Ident::new(&format!("__{ident_pascal}"), ident.span());
+        let marker_ident = syn::Ident::new(&format!("_{ident_pascal}_"), ident.span());
 
-        let cfg = cfg_helpers::combine_cfg(&field.attrs);
-        let meta = cfg.iter();
-        let ty_param = syn::parse_quote!(
-            #(#[cfg(#meta)])* #ty_ident: ::moveit2::ctor::__private::IsInit = #marker_ident
-        );
+        // strip all non-built-in attributes
+        field
+            .attrs
+            .retain(|attr| attr_helpers::is_builtin_field_attr(&attr.meta));
+
         BuilderField {
-            index,
-            marker_ident,
-            ty_ident,
-            doc_attrs: cfg_helpers::doc_attrs(&field.attrs),
-            cfg,
-            ty_param,
             field,
+            marker_ident,
         }
     }
 
-    pub fn builder_def(&self) -> TokenStream2 {
+    pub fn marker_def(&self) -> TokenStream2 {
+        let vis = &self.field.vis;
+        let marker = &self.marker_ident;
+        quote!(#vis struct #marker;)
+    }
+
+    pub fn proj_field_def(&self, init: bool) -> TokenStream2 {
         let vis = &self.field.vis;
         let ident = &self.field.ident;
-        let ty_ident = &self.ty_ident;
+        let marker = &self.marker_ident;
+
+        let attrs = &self.field.attrs;
         let ty = &self.field.ty;
-        let doc = &self.doc_attrs;
-        let meta = self.cfg.iter();
+
+        let path = if init {
+            quote!(::moveit2::ctor::PinInit)
+        } else {
+            quote!(::moveit2::ctor::Uninit)
+        };
 
         quote! {
-            #(#doc)*
-            #(#[cfg(#meta)])*
-            #vis #ident: ::moveit2::ctor::__private::PinMaybeInit<'__ctor, #ty, #ty_ident>,
-        }
-    }
-
-    pub fn impl_ty_macro_def(&self) -> TokenStream2 {
-        let ident = format_ident!("{}{}", IMPL_TY_MACRO, self.index);
-        let next_ident = format_ident!("{}{}", IMPL_TY_MACRO, self.index + 1);
-        let meta = self.cfg.iter();
-        let meta2 = self.cfg.iter();
-
-        quote! {
-            #(#[cfg(#meta)])*
-            macro_rules! #ident {
-                ([$($tts:tt)*]  $f:ty, $($tail:ty,)*) => {
-                    #next_ident!([$($tts)* $f,] $($tail,)*)
-                };
-            }
-            #(
-                #[cfg(not(#meta2))]
-                macro_rules! #ident {
-                ([$($tts:tt)*]  $f:ty, $($tail:ty,)*) => {
-                    #next_ident!([$($tts)*] $($tail,)*)
-                };
-                }
-            )*
+            #(#attrs)*
+            #vis #ident: #path<'__ctor, #ty, #marker>,
         }
     }
 }
 
 struct Context {
     vis: syn::Visibility,
+    ctor_vis: syn::Visibility,
     ident: syn::Ident,
-    builder_ident: syn::Ident,
-    ctor_lt: syn::Lifetime,
-    struct_generics: syn::Generics,
-    base_generics: syn::Generics,
-    builder_generics: syn::Generics,
+    fields_ident: syn::Ident,
+    proof_ident: syn::Ident,
+    proj_lt: syn::Lifetime,
+    generics: syn::Generics,
+    proj_generics: syn::Generics,
     fields: Vec<BuilderField>,
 }
 
@@ -129,73 +104,83 @@ impl Context {
         };
 
         let ident = input.ident;
-        let builder_ident = format_ident!("{}CtorBuilder", ident);
-        let ctor_lt: syn::Lifetime = parse_quote!('__ctor);
-        let vis = fields.iter().fold(input.vis.clone(), |acc, f| {
+        let fields_ident = format_ident!("{}Fields", ident);
+        let proof_ident = format_ident!("{}Proof", ident);
+        let proj_lt: syn::Lifetime = parse_quote!('__ctor);
+        let ctor_vis = fields.iter().fold(input.vis.clone(), |acc, f| {
             vis_helpers::vis_min(&acc, &f.vis)
         });
         for f in &mut fields {
-            f.vis = vis.clone();
+            f.vis = ctor_vis.clone();
         }
 
-        let fields: Vec<_> = fields
-            .into_iter()
-            .enumerate()
-            .map(|(i, f)| BuilderField::new(i, f))
-            .collect();
+        let fields: Vec<_> = fields.into_iter().map(BuilderField::new).collect();
 
-        let struct_generics = input.generics;
-        let mut base_generics = struct_generics.clone();
-        base_generics.params.insert(
+        let generics = input.generics;
+        let mut proj_generics = generics.clone();
+        proj_generics.params.insert(
             0,
-            syn::GenericParam::Lifetime(syn::LifetimeParam::new(ctor_lt.clone())),
-        );
-
-        let mut builder_generics = base_generics.clone();
-        builder_generics.params.extend(
-            fields
-                .iter()
-                .map(|f| syn::GenericParam::Type(f.ty_param.clone())),
+            syn::GenericParam::Lifetime(syn::LifetimeParam::new(proj_lt.clone())),
         );
 
         Ok(Self {
-            vis,
+            vis: input.vis,
+            ctor_vis,
             ident,
-            builder_ident,
-            ctor_lt,
-            struct_generics,
-            base_generics,
-            builder_generics,
+            fields_ident,
+            proof_ident,
+            proj_lt,
+            generics,
+            proj_generics,
             fields,
         })
     }
 
-    fn marker_idents(&self) -> impl Iterator<Item = &syn::Ident> {
-        self.fields.iter().map(|f| &f.marker_ident)
-    }
-
-    fn marker_defs(&self) -> TokenStream2 {
-        let marker_idents = self.marker_idents();
+    fn proj_def(&self, init: bool) -> TokenStream2 {
         let vis = &self.vis;
+        let ident = if init {
+            &self.proof_ident
+        } else {
+            &self.fields_ident
+        };
+
+        let field_defs = self.fields.iter().map(|f| f.proj_field_def(init));
+        let generics = &self.proj_generics;
+        let where_clause = &generics.where_clause;
+
         quote! {
-            #(
-                #vis struct #marker_idents;
-                impl ::moveit2::ctor::UninitMarker for #marker_idents {}
-            )*
+            #vis struct #ident #generics #where_clause {
+                #(#field_defs)*
+            }
         }
     }
 
-    fn builder_method(&self, index: usize) -> TokenStream2 {
-        let mut generics = self.base_generics.clone();
-        generics.params.extend(
-            self.fields
-                .iter()
-                .filter(|f| f.index != index)
-                .map(|f| syn::GenericParam::Type(f.ty_param.clone())),
-        );
+    fn ctor_impl(&self) -> TokenStream2 {
+        let ident = &self.ident;
+        let fields_ident = &self.fields_ident;
+        let proof_ident = &self.proof_ident;
+        let lt = &self.proj_lt;
+        let (impl_gen, ty_gen, where_clause) = self.generics.split_for_impl();
+        let (_, ty_proj_gen, _) = self.proj_generics.split_for_impl();
 
-        let base_tys: Vec<_> = self
-            .base_generics
+        quote! {
+            #[automatically_derived]
+            impl #impl_gen ::moveit2::ctor::Ctor for #ident #ty_gen #where_clause {
+                type Fields<#lt> = #fields_ident #ty_proj_gen where Self: #lt;
+                type Proof<#lt> = #proof_ident #ty_proj_gen where Self: #lt;
+            }
+        }
+    }
+
+    fn ctor_fn(&self) -> TokenStream2 {
+        let vis = &self.ctor_vis;
+        let ident = &self.ident;
+        let fields_ident = &self.fields_ident;
+        let proof_ident = &self.proof_ident;
+
+        let (s_impl, s_ty, s_where) = self.generics.split_for_impl();
+        let s_ty_unpacked: Vec<_> = self
+            .generics
             .params
             .iter()
             .map(|t| match t {
@@ -205,121 +190,69 @@ impl Context {
             })
             .collect();
 
-        let in_builder_tys = self.fields.iter().map(|f| {
-            if f.index == index {
-                &f.marker_ident
-            } else {
-                &f.ty_ident
-            }
-        });
-
-        let out_builder_tys = self.fields.iter().map(|f| {
-            if f.index == index {
-                parse_quote!(::moveit2::ctor::Init)
-            } else {
-                syn::Path::from(f.ty_ident.clone())
-            }
-        });
-
         let field_assignments = self.fields.iter().map(|f| {
             let ident = &f.field.ident;
-            if f.index == index {
-                quote!(#ident: ::moveit2::ctor::MaybeInit::emplace(self.#ident, ctor))
-            } else {
-                let meta = f.cfg.iter();
-                quote!(#(#[cfg(#meta)])* #ident: self.#ident)
-            }
+            let cfgs = f
+                .field
+                .attrs
+                .iter()
+                .filter(|attr| attr.path().is_ident("cfg"));
+
+            quote!(
+                #(#cfgs)* #ident: ::moveit2::ctor::Uninit::new_unchecked(&raw mut (*ptr).#ident, trap.flag()),
+            )
         });
 
-        let (impl_generics, _, where_clause) = generics.split_for_impl();
-
-        let macro_ident = format_ident!("{IMPL_TY_MACRO}0");
-        let vis = &self.vis;
-
-        let field = &self.fields[index];
-        let fn_ident = &field.field.ident;
-        let field_ty = &field.field.ty;
-        let cfg_meta = field.cfg.iter();
-        let doc = &field.doc_attrs;
-        let builder_ident = &self.builder_ident;
-
         quote! {
-            #(#[cfg(#cfg_meta)])*
-            impl #impl_generics #macro_ident!([#(#base_tys,)*] #(#in_builder_tys,)*) #where_clause {
-                #(#doc)*
-                #vis fn #fn_ident(self, ctor: impl ::moveit2::New<Output = #field_ty>) ->
-                    #macro_ident!([#(#base_tys,)*] #(#out_builder_tys,)*)
+            impl #s_impl #ident #s_ty #s_where {
+                #vis fn ctor<__C>(ctor: __C) -> impl ::moveit2::New<Output = Self>
+                where
+                    __C: FnOnce(#fields_ident<'_, #(#s_ty_unpacked,)*>) ->
+                        #proof_ident<'_, #(#s_ty_unpacked,)*>
                 {
-                    #builder_ident {
-                        #(#field_assignments,)*
+                    Self::try_ctor::<_, ::moveit2::ctor::__private::Infallible>(|fields| Ok(ctor(fields)))
+                }
+
+                #vis fn try_ctor<__C, __E>(ctor: __C) -> impl ::moveit2::TryNew<Output = Self, Error = __E>
+                where
+                    __C: FnOnce(#fields_ident<'_, #(#s_ty_unpacked,)*>) ->
+                        Result<#proof_ident<'_, #(#s_ty_unpacked,)*>, __E>
+                {
+                    unsafe {
+                        ::moveit2::new::try_by_raw::<Self, __E, _>(|slot| {
+                            let trap = ::moveit2::drop_flag::TrappedFlag::new();
+                            let ptr = ::moveit2::ctor::__private::Pin::into_inner_unchecked(slot)
+                                .as_mut_ptr();
+
+                            let fields = #fields_ident {
+                                #(#field_assignments)*
+                            };
+                            let proof = ctor(fields)?;
+
+                            ::moveit2::ctor::__private::forget(proof);
+                            ::moveit2::ctor::__private::forget(trap);
+                            Ok(())
+                        })
                     }
                 }
             }
         }
     }
 
-    fn ctor_impl(&self) -> TokenStream2 {
-        let (s_impl, s_ty, s_where) = self.struct_generics.split_for_impl();
-        let s_ident = &self.ident;
-        let vis = &self.vis;
-
-        let macro_ident = format_ident!("{IMPL_TY_MACRO}0");
-
-        let base_tys: Vec<_> = self
-            .base_generics
-            .params
-            .iter()
-            .map(|t| match t {
-                syn::GenericParam::Const(c) => c.ident.to_token_stream(),
-                syn::GenericParam::Lifetime(lt) => lt.lifetime.to_token_stream(),
-                syn::GenericParam::Type(ty) => ty.ident.to_token_stream(),
-            })
-            .collect();
-
-        let init_markers = (0..self.fields.len()).map(|_| quote!(::moveit2::ctor::Init));
-        let builder_ident = &self.builder_ident;
-
-        quote! {
-            impl #s_impl #s_ident #s_ty #s_where {
-                #vis fn ctor<__F>(f: __F) -> impl ::moveit2::New<Output = Self> where
-                    __F: for<'__ctor> FnOnce(#builder_ident<#(#base_tys,)*>) ->
-                    #macro_ident!([#(#base_tys,)*] #(#init_markers,)*)
-                {
-                    todo!()
-                }
-            }
-        }
-    }
-
     fn generate(self) -> TokenStream2 {
-        let builder_ident = &self.builder_ident;
-        let marker_defs = self.marker_defs();
-        let field_macros = self.fields.iter().map(|f| f.impl_ty_macro_def());
-        let builder_field_defs = self.fields.iter().map(|f| f.builder_def());
-        let final_ty_macro = format_ident!("{}{}", IMPL_TY_MACRO, self.fields.len());
-        let vis = &self.vis;
-        let generics = &self.builder_generics;
-        let where_clause = &generics.where_clause;
-
-        let builder_methods = (0..self.fields.len()).map(|i| self.builder_method(i));
+        let marker_defs = self.fields.iter().map(|f| f.marker_def());
+        let fields_struct = self.proj_def(false);
+        let proof_struct = self.proj_def(true);
         let ctor_impl = self.ctor_impl();
+        let ctor_fn = self.ctor_fn();
 
         quote! {
             const _: () = {
-                #marker_defs
-                #(#field_macros)*
-
-                #vis struct #builder_ident #generics #where_clause {
-                    #(#builder_field_defs)*
-                }
-
-                macro_rules! #final_ty_macro {
-                    ([$($tts:tt)*]) => { #builder_ident<$($tts)*> }
-                }
-
-                #(#builder_methods)*
-
+                #(#marker_defs)*
+                #fields_struct
+                #proof_struct
                 #ctor_impl
+                #ctor_fn
             };
         }
     }
@@ -334,14 +267,4 @@ pub fn ctor_derive(item: TokenStream) -> TokenStream {
         Err(e) => e.into_compile_error(),
     }
     .into()
-}
-
-#[proc_macro_attribute]
-pub fn ctor(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut tokens: TokenStream = quote! {
-        #[derive(::moveit2::ctor::__private::Ctor)]
-    }
-    .into();
-    tokens.extend([item]);
-    tokens
 }
