@@ -284,7 +284,7 @@ macro_rules! ctor {
     };
 
     (|$fields:ident| $struct:ty {
-            $($field:ident $(:$expr:expr)?),*
+            $($(#[$attrs:meta])* $field:ident $(:$expr:expr)?),*
             $(,)?
     }) => {
         <$struct>::ctor(|$fields| {
@@ -294,11 +294,11 @@ macro_rules! ctor {
             };
 
             $(
-                $crate::ctor!(__assign_field[$fields]($field $(:$expr)?));
+                $crate::ctor!(__assign_field[$fields]($(#[$attrs])* $field $(:$expr)?));
             )*
 
             $crate::ctor::InitProof::<$struct> {
-                $($field),*
+                $($(#[$attrs])* $field),*
             }
         })
     };
@@ -313,7 +313,7 @@ macro_rules! ctor {
 
     (__gather_stmt[$fields:ident]{ $($statements:stmt)* }{
         $struct:ty {
-            $($field:ident $(:$expr:expr)?),*
+            $($(#[$attrs:meta])* $field:ident $(:$expr:expr)?),*
             $(,)?
         }
     }) => {
@@ -326,11 +326,11 @@ macro_rules! ctor {
             };
 
             $(
-                $crate::ctor!(__assign_field[$fields]($field $(:$expr)?));
+                $crate::ctor!(__assign_field[$fields]($(#[$attrs])* $field $(:$expr)?));
             )*
 
             $crate::ctor::InitProof::<$struct> {
-                $($field),*
+                $($(#[$attrs])* $field),*
             }
         })
     };
@@ -342,11 +342,13 @@ macro_rules! ctor {
         $crate::ctor!(__gather_stmt[$fields]{$($statements;)* $stmt; }{ $($tokens)* })
     };
 
-    (__assign_field[$fields:ident]($field:ident)) => {
+    (__assign_field[$fields:ident]($(#[$attrs:meta])* $field:ident)) => {
+        $(#[$attrs])*
         let mut $field = (&&$crate::ctor::__private::CtorSpec::new($fields.$field, $field)).init();
     };
 
-    (__assign_field[$fields:ident]($field:ident: $expr:expr)) => {
+    (__assign_field[$fields:ident]($(#[$attrs:meta])* $field:ident: $expr:expr)) => {
+        $(#[$attrs])*
         let mut $field = (&&$crate::ctor::__private::CtorSpec::new($fields.$field, $expr)).init();
     };
 }
@@ -365,7 +367,7 @@ macro_rules! try_ctor {
         })
     };
     ($err:ty, |$fields:ident| $struct:ty {
-            $($field:ident $(:$expr:expr)?),*
+            $($(#[$attrs:meta])* $field:ident $(:$expr:expr)?),*
             $(,)?
     }) => {
         <$struct>::try_ctor::<_, $err>(|$fields| {
@@ -376,11 +378,11 @@ macro_rules! try_ctor {
             };
 
             $(
-                $crate::try_ctor!(__try_assign_field[$err, $fields]($field $(:$expr)?));
+                $crate::try_ctor!(__try_assign_field[$err, $fields]($(#[$attrs])* $field $(:$expr)?));
             )*
 
             Ok($crate::ctor::InitProof::<$struct> {
-                $($field),*
+                $($(#[$attrs])* $field),*
             })
         })
     };
@@ -395,7 +397,7 @@ macro_rules! try_ctor {
 
     (__gather_stmt[$err:ty, $fields:ident]{ $($statements:stmt)* }{
         $struct:ty {
-            $($field:ident $(:$expr:expr)?),*
+            $($(#[$attrs:meta])* $field:ident $(:$expr:expr)?),*
             $(,)?
         }
     }) => {
@@ -409,11 +411,11 @@ macro_rules! try_ctor {
             };
 
             $(
-                $crate::try_ctor!(__try_assign_field[$err, $fields]($field $(:$expr)?));
+                $crate::try_ctor!(__try_assign_field[$err, $fields]($(#[$attrs])* $field $(:$expr)?));
             )*
 
             Ok($crate::ctor::InitProof::<$struct> {
-                $($field),*
+                $($(#[$attrs])* $field),*
             })
         })
     };
@@ -425,13 +427,15 @@ macro_rules! try_ctor {
         $crate::try_ctor!(__gather_stmt[$err, $fields]{$($statements;)* $stmt; }{ $($tokens)* })
     };
 
-    (__try_assign_field[$err:ty, $fields:ident]($field:ident)) => {
+    (__try_assign_field[$err:ty, $fields:ident]($(#[$attrs:meta])* $field:ident)) => {
+        $(#[$attrs])*
         let mut $field = (
             &&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new($fields.$field, $field)
         ).try_init()?;
     };
 
-    (__try_assign_field[$err:ty, $fields:ident]($field:ident: $expr:expr)) => {
+    (__try_assign_field[$err:ty, $fields:ident]($(#[$attrs:meta])* $field:ident: $expr:expr)) => {
+        $(#[$attrs])*
         let mut $field = (
             &&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new($fields.$field, $expr)
         ).try_init()?;
