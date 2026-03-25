@@ -14,8 +14,6 @@ pub use moveit2_proc_macros::Ctor;
 
 #[doc(hidden)]
 pub mod __private {
-    use core::cell::Cell;
-
     pub use core::convert::Infallible;
     pub use core::marker::PhantomData;
     pub use core::mem::forget;
@@ -31,102 +29,112 @@ pub mod __private {
     //
     // https://lukaskalbertodt.github.io/2019/12/05/generalized-autoref-based-specialization.html
 
-    pub struct CtorSpec<'a, T, F, U>(Cell<Option<(Uninit<'a, T, F>, U)>>);
+    #[allow(clippy::type_complexity)]
+    pub struct CtorSpec<T, F, U>(PhantomData<fn() -> (T, F, U)>);
 
-    impl<'a, T, F, U> CtorSpec<'a, T, F, U> {
+    impl<T, F, U> CtorSpec<T, F, U> {
         #[inline]
-        pub fn new(uninit: Uninit<'a, T, F>, src: U) -> Self {
-            Self(Cell::new(Some((uninit, src))))
+        pub fn new<'a>(_uninit: &Uninit<'a, T, F>, _src: &U) -> Self {
+            Self(PhantomData)
         }
     }
 
-    pub trait ViaEmplace<'a, T, F> {
-        fn init(&self) -> PinInit<'a, T, F>;
+    pub trait ViaEmplace<T, F, U> {
+        fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> PinInit<'a, T, F>;
     }
 
-    impl<'a, T, F, U> ViaEmplace<'a, T, F> for &CtorSpec<'a, T, F, U>
+    impl<T, F, U> ViaEmplace<T, F, U> for &CtorSpec<T, F, U>
     where
         U: New<Output = T>,
     {
-        #[inline]
-        fn init(&self) -> PinInit<'a, T, F> {
-            let (uninit, new) = self.0.take().unwrap();
-            uninit.emplace(new)
+        fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> PinInit<'a, T, F> {
+            uninit.emplace(src)
         }
     }
 
-    pub trait ViaPut<'a, T, F> {
-        fn init(&self) -> PinInit<'a, T, F>;
+    pub trait ViaPut<T, F> {
+        fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: T) -> PinInit<'a, T, F>;
     }
 
-    impl<'a, T, F> ViaPut<'a, T, F> for CtorSpec<'a, T, F, T> {
-        #[inline]
-        fn init(&self) -> PinInit<'a, T, F> {
-            let (uninit, val) = self.0.take().unwrap();
-            uninit.put(val)
+    impl<T, F> ViaPut<T, F> for CtorSpec<T, F, T> {
+        fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: T) -> PinInit<'a, T, F> {
+            uninit.put(src)
         }
     }
 
-    pub struct TryCtorSpec<'a, T, F, U, E> {
-        assign_pair: Cell<Option<(Uninit<'a, T, F>, U)>>,
-        phantom: PhantomData<fn() -> E>,
-    }
+    #[allow(clippy::type_complexity)]
+    pub struct TryCtorSpec<T, F, U, E>(PhantomData<fn() -> (T, F, U, E)>);
 
-    impl<'a, T, F, U, E> TryCtorSpec<'a, T, F, U, E> {
+    impl<T, F, U, E> TryCtorSpec<T, F, U, E> {
         #[inline]
-        pub fn new(uninit: Uninit<'a, T, F>, src: U) -> Self {
-            Self {
-                assign_pair: Cell::new(Some((uninit, src))),
-                phantom: PhantomData,
-            }
+        pub fn new<'a>(_uninit: &Uninit<'a, T, F>, _src: &U) -> Self {
+            Self(PhantomData)
         }
     }
 
-    pub trait TryViaEmplace<'a, T, F, E> {
-        fn try_init(&self) -> Result<PinInit<'a, T, F>, E>;
+    pub trait TryViaEmplace<T, F, U, E> {
+        fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> Result<PinInit<'a, T, F>, E>;
     }
-    impl<'a, T, F, U, E> TryViaEmplace<'a, T, F, E> for &&TryCtorSpec<'a, T, F, U, E>
+    impl<T, F, U, E> TryViaEmplace<T, F, U, E> for &&TryCtorSpec<T, F, U, E>
     where
         U: New<Output = T>,
     {
-        #[inline]
-        fn try_init(&self) -> Result<PinInit<'a, T, F>, E> {
-            let (uninit, new) = self.assign_pair.take().unwrap();
-            Ok(uninit.emplace(new))
+        fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> Result<PinInit<'a, T, F>, E> {
+            Ok(uninit.emplace(src))
         }
     }
 
-    pub trait TryViaTryEmplace<'a, T, F, E> {
-        fn try_init(&self) -> Result<PinInit<'a, T, F>, E>;
+    pub trait TryViaTryEmplace<T, F, U, E> {
+        fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> Result<PinInit<'a, T, F>, E>;
     }
-    impl<'a, T, F, U, E> TryViaTryEmplace<'a, T, F, E> for &TryCtorSpec<'a, T, F, U, E>
+    impl<T, F, U, E> TryViaTryEmplace<T, F, U, E> for &TryCtorSpec<T, F, U, E>
     where
         U: TryNew<Output = T, Error: Into<E>>,
     {
-        #[inline]
-        fn try_init(&self) -> Result<PinInit<'a, T, F>, E> {
-            let (uninit, new) = self.assign_pair.take().unwrap();
-            uninit.try_emplace(new).map_err(Into::into)
+        fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> Result<PinInit<'a, T, F>, E> {
+            uninit.try_emplace(src).map_err(Into::into)
         }
     }
 
-    pub trait TryViaPut<'a, T, F, E> {
-        fn try_init(&self) -> Result<PinInit<'a, T, F>, E>;
+    pub trait TryViaPut<T, F, E> {
+        fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: T) -> Result<PinInit<'a, T, F>, E>;
     }
-    impl<'a, T, F, E> TryViaPut<'a, T, F, E> for TryCtorSpec<'a, T, F, T, E> {
-        #[inline]
-        fn try_init(&self) -> Result<PinInit<'a, T, F>, E> {
-            let (uninit, val) = self.assign_pair.take().unwrap();
-            Ok(uninit.put(val))
+    impl<T, F, E> TryViaPut<T, F, E> for TryCtorSpec<T, F, T, E> {
+        fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: T) -> Result<PinInit<'a, T, F>, E> {
+            Ok(uninit.put(src))
         }
     }
 }
 
 /// Trait implemented on struct types that can be in-place constructed field by field.
 ///
-/// When applied to a struct using [`derive`], this generates a `ctor` member function
-/// that generates a [`TryNew`] implementation initializing the struct in place, field
-/// by field.
+/// When applied to a struct using [`derive`], this generates `ctor` and `try_ctor` member
+/// functions that respectively return [`New`] and [`TryNew`] implementations for initializing
+/// the struct in place, field by field:
+///
+/// ```rust
+/// use moveit2::{Ctor, InitProof, moveit, new};
+///
+/// #[derive(Ctor)]
+/// pub struct SelfRef<T> {
+///     value: T,
+///     value_ptr: *const T,
+/// }
+///
+/// let value_new = new::of("abcdef");
+/// let ctor = SelfRef::ctor(|fields| InitProof::<SelfRef<_>> {
+///     // initialize this field by moving into it.
+///     value_ptr: fields.value_ptr.put(fields.value.as_ptr()),
+///     // initialize this field via in-place construction.
+///     value: fields.value.emplace(value_new),
+/// });
+///
+/// moveit!(let self_ref = ctor);
+///
+/// assert_eq!(&raw const self_ref.value, self_ref.value_ptr);
+/// ```
+///
+/// # Limitations
 ///
 /// Due to [type system restrictions around higher-kinded lifetimes](https://users.rust-lang.org/t/for-a-a-t-seems-to-require-t-static/137175/5?u=tremwil)
 /// and the poor type inference of workarounds to said restrictions, the [`Ctor`] trait
@@ -143,6 +151,9 @@ pub trait Ctor: Sized {
     ///
     /// This is called a "proof" as constructing this type requires initializing every
     /// field exposed through [`Ctor::Fields`], thus proving that `Self` is now initialized.
+    ///
+    /// It is easiest to access this associated type through the [`InitProof`] type alias for
+    /// constructing instances.
     type Proof<'a>
     where
         Self: 'a;
@@ -160,6 +171,7 @@ pub type InitProof<'a, T> = <T as Ctor>::Proof<'a>;
 /// This can [`Deref`] into a [`MaybeUninit`], but only immutably. To initialize
 /// the field, use the [`put`], [`emplace`] and [`try_emplace`] methods.
 ///
+/// [`Slot`]: crate::Slot
 /// [`put`]: Uninit::put
 /// [`emplace`]: Uninit::emplace
 /// [`try_emplace`]: Uninit::try_emplace
@@ -294,7 +306,7 @@ macro_rules! ctor {
             };
 
             $(
-                $crate::ctor!(__assign_field[$fields]($(#[$attrs])* $field $(:$expr)?));
+                $crate::ctor!(@assign_field[$fields]($(#[$attrs])* $field $(:$expr)?));
             )*
 
             $crate::ctor::InitProof::<$struct> {
@@ -308,10 +320,10 @@ macro_rules! ctor {
     };
 
     (|$fields:ident| { $($tokens:tt)* }) => {
-        $crate::ctor!(__gather_stmt[$fields]{}{ $($tokens)* })
+        $crate::ctor!(@gather_stmt[$fields]{}{ $($tokens)* })
     };
 
-    (__gather_stmt[$fields:ident]{ $($statements:stmt)* }{
+    (@gather_stmt[$fields:ident]{ $($statements:stmt)* }{
         $struct:ty {
             $($(#[$attrs:meta])* $field:ident $(:$expr:expr)?),*
             $(,)?
@@ -326,7 +338,7 @@ macro_rules! ctor {
             };
 
             $(
-                $crate::ctor!(__assign_field[$fields]($(#[$attrs])* $field $(:$expr)?));
+                $crate::ctor!(@assign_field[$fields]($(#[$attrs])* $field $(:$expr)?));
             )*
 
             $crate::ctor::InitProof::<$struct> {
@@ -335,21 +347,25 @@ macro_rules! ctor {
         })
     };
 
-    (__gather_stmt[$fields:ident]{ $($statements:stmt)* }{
+    (@gather_stmt[$fields:ident]{ $($statements:stmt)* }{
         $stmt:stmt;
         $($tokens:tt)*
     }) => {
-        $crate::ctor!(__gather_stmt[$fields]{$($statements;)* $stmt; }{ $($tokens)* })
+        $crate::ctor!(@gather_stmt[$fields]{$($statements;)* $stmt; }{ $($tokens)* })
     };
 
-    (__assign_field[$fields:ident]($(#[$attrs:meta])* $field:ident)) => {
+    (@assign_field[$fields:ident]($(#[$attrs:meta])* $field:ident)) => {
         $(#[$attrs])*
-        let mut $field = (&&$crate::ctor::__private::CtorSpec::new($fields.$field, $field)).init();
+        let mut $field = (&&$crate::ctor::__private::CtorSpec::new(&$fields.$field, &$field))
+            .init($fields.$field, $field);
     };
 
-    (__assign_field[$fields:ident]($(#[$attrs:meta])* $field:ident: $expr:expr)) => {
+    (@assign_field[$fields:ident]($(#[$attrs:meta])* $field:ident: $expr:expr)) => {
         $(#[$attrs])*
-        let mut $field = (&&$crate::ctor::__private::CtorSpec::new($fields.$field, $expr)).init();
+        let mut $field = match $expr {
+            __expr => (&&$crate::ctor::__private::CtorSpec::new(&$fields.$field, &__expr))
+                .init($fields.$field, __expr)
+        };
     };
 }
 
@@ -378,7 +394,7 @@ macro_rules! try_ctor {
             };
 
             $(
-                $crate::try_ctor!(__try_assign_field[$err, $fields]($(#[$attrs])* $field $(:$expr)?));
+                $crate::try_ctor!(@assign_field[$err, $fields]($(#[$attrs])* $field $(:$expr)?));
             )*
 
             Ok($crate::ctor::InitProof::<$struct> {
@@ -392,10 +408,10 @@ macro_rules! try_ctor {
     };
 
     ($err:ty, |$fields:ident| { $($tokens:tt)* }) => {
-        $crate::try_ctor!(__gather_stmt[$err, $fields]{}{ $($tokens)* })
+        $crate::try_ctor!(@gather_stmt[$err, $fields]{}{ $($tokens)* })
     };
 
-    (__gather_stmt[$err:ty, $fields:ident]{ $($statements:stmt)* }{
+    (@gather_stmt[$err:ty, $fields:ident]{ $($statements:stmt)* }{
         $struct:ty {
             $($(#[$attrs:meta])* $field:ident $(:$expr:expr)?),*
             $(,)?
@@ -411,7 +427,7 @@ macro_rules! try_ctor {
             };
 
             $(
-                $crate::try_ctor!(__try_assign_field[$err, $fields]($(#[$attrs])* $field $(:$expr)?));
+                $crate::try_ctor!(@assign_field[$err, $fields]($(#[$attrs])* $field $(:$expr)?));
             )*
 
             Ok($crate::ctor::InitProof::<$struct> {
@@ -420,25 +436,27 @@ macro_rules! try_ctor {
         })
     };
 
-    (__gather_stmt[$err:ty, $fields:ident]{ $($statements:stmt)* }{
+    (@gather_stmt[$err:ty, $fields:ident]{ $($statements:stmt)* }{
         $stmt:stmt;
         $($tokens:tt)*
     }) => {
-        $crate::try_ctor!(__gather_stmt[$err, $fields]{$($statements;)* $stmt; }{ $($tokens)* })
+        $crate::try_ctor!(@gather_stmt[$err, $fields]{$($statements;)* $stmt; }{ $($tokens)* })
     };
 
-    (__try_assign_field[$err:ty, $fields:ident]($(#[$attrs:meta])* $field:ident)) => {
+    (@assign_field[$err:ty, $fields:ident]($(#[$attrs:meta])* $field:ident)) => {
         $(#[$attrs])*
         let mut $field = (
-            &&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new($fields.$field, $field)
-        ).try_init()?;
+            &&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new(&$fields.$field, &$field)
+        ).try_init($fields.$field, $field)?;
     };
 
-    (__try_assign_field[$err:ty, $fields:ident]($(#[$attrs:meta])* $field:ident: $expr:expr)) => {
+    (@assign_field[$err:ty, $fields:ident]($(#[$attrs:meta])* $field:ident: $expr:expr)) => {
         $(#[$attrs])*
-        let mut $field = (
-            &&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new($fields.$field, $expr)
-        ).try_init()?;
+        let mut $field = match $expr {
+            __expr => (
+                &&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new(&$fields.$field, &__expr)
+            ).try_init($fields.$field, __expr)?
+        };
     };
 }
 
