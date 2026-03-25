@@ -1,10 +1,11 @@
+use std::collections::HashSet;
 use std::fmt::Display;
 
 use inflections::Inflect;
 use proc_macro::TokenStream;
+use proc_macro2::Span as Span2;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{ToTokens, format_ident, quote};
-use syn::parse_quote;
+use quote::{ToTokens, quote};
 
 mod attr_helpers;
 mod vis_helpers;
@@ -17,23 +18,26 @@ where
     Err(syn::Error::new_spanned(tokens, message))
 }
 
-struct BuilderField {
+struct ProjField {
     field: syn::Field,
     marker_ident: syn::Ident,
 }
 
-impl BuilderField {
-    pub fn new(mut field: syn::Field) -> Self {
+impl ProjField {
+    pub fn new(mut field: syn::Field, unsafe_idents: &HashSet<String>) -> Self {
         let ident = field.ident.as_ref().unwrap();
         let ident_pascal = ident.to_string().to_pascal_case();
-        let marker_ident = syn::Ident::new(&format!("_{ident_pascal}_"), ident.span());
+        let marker_ident = syn::Ident::new(
+            &Context::make_safe_name(&format!("__{ident_pascal}"), |s| unsafe_idents.contains(s)),
+            ident.span(),
+        );
 
         // strip all non-built-in attributes
         field
             .attrs
             .retain(|attr| attr_helpers::is_builtin_field_attr(&attr.meta));
 
-        BuilderField {
+        ProjField {
             field,
             marker_ident,
         }
@@ -43,26 +47,6 @@ impl BuilderField {
         let vis = &self.field.vis;
         let marker = &self.marker_ident;
         quote!(#vis struct #marker;)
-    }
-
-    pub fn proj_field_def(&self, init: bool) -> TokenStream2 {
-        let vis = &self.field.vis;
-        let ident = &self.field.ident;
-        let marker = &self.marker_ident;
-
-        let attrs = &self.field.attrs;
-        let ty = &self.field.ty;
-
-        let path = if init {
-            quote!(::moveit2::ctor::PinInit)
-        } else {
-            quote!(::moveit2::ctor::Uninit)
-        };
-
-        quote! {
-            #(#attrs)*
-            #vis #ident: #path<'__ctor, #ty, #marker>,
-        }
     }
 }
 
@@ -75,7 +59,8 @@ struct Context {
     proj_lt: syn::Lifetime,
     generics: syn::Generics,
     proj_generics: syn::Generics,
-    fields: Vec<BuilderField>,
+    fields: Vec<ProjField>,
+    unsafe_idents: HashSet<String>,
 }
 
 impl Context {
@@ -107,10 +92,21 @@ impl Context {
             syn::Fields::Named(n) => n.named,
         };
 
+        let mut unsafe_idents = Self::collect_unsafe_idents(&fields, &input.generics);
+        unsafe_idents.insert(input.ident.to_string());
+
         let ident = input.ident;
-        let fields_ident = format_ident!("{}Fields", ident);
-        let proof_ident = format_ident!("{}Proof", ident);
-        let proj_lt: syn::Lifetime = parse_quote!('__ctor);
+        let fields_ident = syn::Ident::new(
+            &Self::make_safe_name(&format!("{}Fields", ident), |s| unsafe_idents.contains(s)),
+            ident.span(),
+        );
+        let proof_ident = syn::Ident::new(
+            &Self::make_safe_name(&format!("{}Proof", ident), |s| unsafe_idents.contains(s)),
+            ident.span(),
+        );
+        let proj_lt: syn::Lifetime = Self::make_safe_lt("lt", |s| {
+            input.generics.lifetimes().any(|lt| lt.lifetime.ident == s)
+        });
         let ctor_vis = fields.iter().fold(input.vis.clone(), |acc, f| {
             vis_helpers::vis_min(&acc, &f.vis)
         });
@@ -118,7 +114,10 @@ impl Context {
             f.vis = ctor_vis.clone();
         }
 
-        let fields: Vec<_> = fields.into_iter().map(BuilderField::new).collect();
+        let fields: Vec<_> = fields
+            .into_iter()
+            .map(|f| ProjField::new(f, &unsafe_idents))
+            .collect();
 
         let generics = input.generics;
         let mut proj_generics = generics.clone();
@@ -137,7 +136,75 @@ impl Context {
             generics,
             proj_generics,
             fields,
+            unsafe_idents,
         })
+    }
+
+    fn collect_unsafe_idents<'a>(
+        fields: impl IntoIterator<Item = &'a syn::Field>,
+        generics: &syn::Generics,
+    ) -> HashSet<String> {
+        struct Visitor(HashSet<String>);
+        impl<'ast> syn::visit::Visit<'ast> for Visitor {
+            fn visit_type_path(&mut self, i: &'ast syn::TypePath) {
+                if i.path.leading_colon.is_none() && i.path.segments.len() == 1 {
+                    self.0
+                        .insert(i.path.segments.first().unwrap().ident.to_string());
+                }
+                syn::visit::visit_type_path(self, i);
+            }
+
+            fn visit_type_param(&mut self, i: &'ast syn::TypeParam) {
+                self.0.insert(i.ident.to_string());
+                syn::visit::visit_type_param(self, i);
+            }
+        }
+        let mut v = Visitor(HashSet::new());
+        fields
+            .into_iter()
+            .for_each(|f| syn::visit::visit_field(&mut v, f));
+        syn::visit::visit_generics(&mut v, generics);
+        v.0
+    }
+
+    fn make_safe_name(name: &str, exists: impl Fn(&str) -> bool) -> String {
+        let mut name = name.to_owned();
+        while exists(&name) {
+            name = format!("_{name}");
+        }
+        name
+    }
+
+    fn make_safe_lt(name: &str, exists: impl Fn(&str) -> bool) -> syn::Lifetime {
+        syn::Lifetime::new(
+            &format!("'{}", Self::make_safe_name(name, exists)),
+            Span2::call_site(),
+        )
+    }
+
+    fn make_safe_ident(name: &str, exists: impl Fn(&str) -> bool) -> syn::Ident {
+        syn::Ident::new(&Self::make_safe_name(name, exists), Span2::call_site())
+    }
+
+    pub fn proj_field_def(&self, field: &ProjField, init: bool) -> TokenStream2 {
+        let vis = &field.field.vis;
+        let ident = &field.field.ident;
+        let marker = &field.marker_ident;
+
+        let attrs = &field.field.attrs;
+        let ty = &field.field.ty;
+        let lt = &self.proj_lt;
+
+        let path = if init {
+            quote!(::moveit2::ctor::PinInit)
+        } else {
+            quote!(::moveit2::ctor::Uninit)
+        };
+
+        quote! {
+            #(#attrs)*
+            #vis #ident: #path<#lt, #ty, #marker>,
+        }
     }
 
     fn proj_def(&self, init: bool) -> TokenStream2 {
@@ -148,7 +215,7 @@ impl Context {
             &self.fields_ident
         };
 
-        let field_defs = self.fields.iter().map(|f| f.proj_field_def(init));
+        let field_defs = self.fields.iter().map(|f| self.proj_field_def(f, init));
         let generics = &self.proj_generics;
         let where_clause = &generics.where_clause;
 
@@ -181,6 +248,7 @@ impl Context {
         let ident = &self.ident;
         let fields_ident = &self.fields_ident;
         let proof_ident = &self.proof_ident;
+        let lt = &self.proj_lt;
 
         let (s_impl, s_ty, s_where) = self.generics.split_for_impl();
         let s_ty_unpacked: Vec<_> = self
@@ -207,14 +275,17 @@ impl Context {
             )
         });
 
+        let ctor_ty = Self::make_safe_ident("F", |s| self.unsafe_idents.contains(s));
+        let err_ty = Self::make_safe_ident("E", |s| self.unsafe_idents.contains(s));
+
         quote! {
             impl #s_impl #ident #s_ty #s_where {
                 /// Create a [`New`](::moveit2::New) implementation that in-place initializes each field
                 /// of this struct, using purely safe code.
                 ///
-                /// This is done by providing a closure that takes [`Self::Fields<'a>`] (the fields
-                /// of the struct as [`Uninit`] slots), and returns a [`Self::Proof<'a>`] (the
-                /// initialized fields as [`Init`] values).
+                /// This is done by providing a *proof of initialization*: A closure that takes
+                /// [`Self::Fields<'_>`] (the fields of the struct as [`Uninit`] slots), and
+                /// returns a [`Self::Proof<'_>`] (the initialized fields as [`Init`] values).
                 ///
                 /// This function was generated by the [`Ctor`] derive macro. For more information see
                 /// the [moveit2 `ctor` documentation](::moveit2::ctor).
@@ -223,10 +294,10 @@ impl Context {
                 /// [`Self::Proof<'a>`]: ::moveit2::ctor::Ctor::Proof
                 /// [`Uninit`]: ::moveit2::ctor::Uninit
                 /// [`Init`]: ::moveit2::ctor::Init
-                #vis fn ctor<__C>(ctor: __C) -> impl ::moveit2::New<Output = Self>
+                #vis fn ctor<#ctor_ty>(ctor: #ctor_ty) -> impl ::moveit2::New<Output = Self>
                 where
-                    __C: FnOnce(#fields_ident<'_, #(#s_ty_unpacked,)*>) ->
-                        #proof_ident<'_, #(#s_ty_unpacked,)*>
+                    #ctor_ty: for<#lt> FnOnce(#fields_ident<#lt, #(#s_ty_unpacked,)*>) ->
+                        #proof_ident<#lt, #(#s_ty_unpacked,)*>
                 {
                     Self::try_ctor::<::moveit2::ctor::__private::Infallible, _>(|fields| Ok(ctor(fields)))
                 }
@@ -234,9 +305,9 @@ impl Context {
                 /// Create a [`TryNew`](::moveit2::TryNew) implementation that in-place initializes
                 /// each field of this struct, using purely safe code.
                 ///
-                /// This is done by providing a closure that takes [`Self::Fields<'a>`] (the fields
-                /// of the struct as [`Uninit`] slots), and fallibly returns a [`Self::Proof<'a>`] (the
-                /// initialized fields as [`Init`] values).
+                /// This is done by providing a *proof of initialization*: A closure that takes
+                /// [`Self::Fields<'_>`] (the fields of the struct as [`Uninit`] slots), and
+                /// fallibly returns a [`Self::Proof<'_>`] (the initialized fields as [`Init`] values).
                 ///
                 /// Note that the usual limitations around type inference for errors in closures apply,
                 /// so you will probably have to specify the error type explicitly. This can be done
@@ -249,13 +320,14 @@ impl Context {
                 /// [`Self::Proof<'a>`]: ::moveit2::ctor::Ctor::Proof
                 /// [`Uninit`]: ::moveit2::ctor::Uninit
                 /// [`Init`]: ::moveit2::ctor::Init
-                #vis fn try_ctor<__E, __C>(ctor: __C) -> impl ::moveit2::TryNew<Output = Self, Error = __E>
+                #vis fn try_ctor<#err_ty, #ctor_ty>(ctor: #ctor_ty) ->
+                    impl ::moveit2::TryNew<Output = Self, Error = #err_ty>
                 where
-                    __C: FnOnce(#fields_ident<'_, #(#s_ty_unpacked,)*>) ->
-                        Result<#proof_ident<'_, #(#s_ty_unpacked,)*>, __E>
+                    #ctor_ty: for<#lt> FnOnce(#fields_ident<#lt, #(#s_ty_unpacked,)*>) ->
+                        Result<#proof_ident<#lt, #(#s_ty_unpacked,)*>, #err_ty>
                 {
                     unsafe {
-                        ::moveit2::new::try_by_raw::<Self, __E, _>(|slot| {
+                        ::moveit2::new::try_by_raw::<Self, #err_ty, _>(|slot| {
                             let trap = ::moveit2::drop_flag::TrappedFlag::new();
                             let ptr = ::moveit2::ctor::__private::Pin::into_inner_unchecked(slot)
                                 .as_mut_ptr();
