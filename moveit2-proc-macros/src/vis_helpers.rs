@@ -1,6 +1,6 @@
 use syn::Visibility;
 
-/// Returns the most strictest of two visibilities, or private/inherited if the
+/// Returns the strictest of two visibilities, or private/inherited if the
 /// comparison is impossible.
 pub fn vis_min(a: &Visibility, b: &Visibility) -> Visibility {
     use Visibility::*;

@@ -83,22 +83,26 @@ impl Context {
         let data = match input.data {
             syn::Data::Struct(data) => data,
             syn::Data::Enum(e) => {
-                return spanned_error(e.enum_token, "#[ctor] does not support enums");
+                return spanned_error(e.enum_token, "Ctor cannot be derived on enums");
             }
             syn::Data::Union(u) => {
-                return spanned_error(u.union_token, "#[ctor] does not support unions");
+                return spanned_error(u.union_token, "Ctor cannot be derived on unions");
             }
         };
 
         let mut fields = match data.fields {
             syn::Fields::Unnamed(t) => {
-                return spanned_error(t, "#[ctor] does not support tuple structs");
+                return spanned_error(
+                    t,
+                    "Ctor cannot be derived on tuple structs. \
+                    This is a limitation that may be lifted in the future.",
+                );
             }
             syn::Fields::Unit => {
-                return spanned_error(data.semi_token, "#[ctor] does not support unit structs");
+                return spanned_error(data.semi_token, "Ctor cannot be derived on unit structs");
             }
             syn::Fields::Named(n) if n.named.is_empty() => {
-                return spanned_error(n, "#[ctor] does not support unit structs");
+                return spanned_error(n, "Ctor cannot be derived on empty structs");
             }
             syn::Fields::Named(n) => n.named,
         };
