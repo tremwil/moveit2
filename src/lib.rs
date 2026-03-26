@@ -28,6 +28,7 @@
 //! - The C++ sense, where a move is really like a mutating `Clone` operation,
 //!   which leave the moved-from value accessible to be destroyed at the end of
 //!   the scope.
+//!
 //! C++ also has *constructors*, which are special functions that produce a new
 //! value in a particular location. In particular, C++ constructors may assume
 //! that the address of `*this` will not change; all C++ objects are effectively

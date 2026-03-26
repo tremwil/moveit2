@@ -1,4 +1,4 @@
-use moveit2::{Ctor, Emplace, InitProof, New, ctor};
+use moveit2::{Ctor, Emplace, InitProof, New, ctor, new};
 use pin_project::pin_project;
 
 #[derive(Ctor)]
@@ -20,12 +20,15 @@ impl<T> SelfReferential<T> {
 
 #[test]
 fn basic_construction() {
-    let self_ref = Box::emplace(ctor!(|fields| {
+    let t = new::by(|| "abcdef");
+
+    let self_ref = Box::try_emplace(ctor!(|fields| {
         SelfReferential::<_> {
-            val: "abcdef",
+            val: t,
             addr_of_val: &raw mut *val,
         }
-    }));
+    }))
+    .unwrap();
 
     assert_eq!(&raw const self_ref.val, self_ref.addr_of_val);
 }
