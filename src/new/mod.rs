@@ -99,7 +99,7 @@ pub unsafe trait TryNew: Sized {
 
 /// An in-place constructor for a particular type.
 ///
-/// This is an extension trait for [`TryNew<Error = Infallible`].
+/// This is an extension trait for [`TryNew<Error = Infallible>`].
 ///
 /// # Safety
 ///
