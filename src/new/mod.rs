@@ -65,13 +65,15 @@ pub unsafe trait TryNew: Sized {
 
     /// Adds a (potentially fallible) post-construction operation.
     ///
-    /// The operation can either return nothing or a [`Result<(), Self::Error>`](TryNew::Error).
+    /// The operation can either return nothing or a [`Result<(),
+    /// Self::Error>`](TryNew::Error).
     ///
     /// This function wraps `self` in an another [`TryNew`] type which will call
-    /// `post` once the main emplacement operation is complete. This is most useful
-    /// for the case where creation of the value itself does not depend on the final
-    /// address, but where some address-sensitive setup may want to occur; this can
-    /// help minimize the scope (or even need for) `unsafe`.
+    /// `post` once the main emplacement operation is complete. This is most
+    /// useful for the case where creation of the value itself does not
+    /// depend on the final address, but where some address-sensitive setup
+    /// may want to occur; this can help minimize the scope (or even need
+    /// for) `unsafe`.
     ///
     /// This function is best combined with other helpers:
     ///
@@ -121,17 +123,19 @@ pub unsafe trait New: TryNew<Error = Infallible> {
 
 unsafe impl<N: TryNew<Error = Infallible>> New for N {}
 
-/// A pointer type that may be "emplaced" as a stable address which a [`New`] may be used to
-/// construct a value with.
+/// A pointer type that may be "emplaced" as a stable address which a [`New`]
+/// may be used to construct a value with.
 ///
-/// The `Emplace<T>::Output` type is usually either `Self` or `Pin<Self>` depending on the API of
-/// `Self` with respect to [`DerefMut`].
+/// The `Emplace<T>::Output` type is usually either `Self` or `Pin<Self>`
+/// depending on the API of `Self` with respect to [`DerefMut`].
 ///
-/// For example, `Arc<T>`, `Box<T>`, and `Rc<T>` are all `Emplace<T, Output = Pin<Self>>`.
+/// For example, `Arc<T>`, `Box<T>`, and `Rc<T>` are all `Emplace<T, Output =
+/// Pin<Self>>`.
 ///
-/// However, `cxx::UniquePtr<T>: Emplace<T, Output = Self>`, since `cxx::UniquePtr<T>` already only
-/// allows obtaining pinned mutable references to `T` due to its more restrictive API, and hence
-/// `cxx::UniquePtr<T>` does not need to be pinned itself.
+/// However, `cxx::UniquePtr<T>: Emplace<T, Output = Self>`, since
+/// `cxx::UniquePtr<T>` already only allows obtaining pinned mutable references
+/// to `T` due to its more restrictive API, and hence `cxx::UniquePtr<T>` does
+/// not need to be pinned itself.
 pub trait Emplace<T>: Sized + Deref {
     /// The stable address type within which a value of type `T` is emplaced.
     type Output: Deref<Target = Self::Target>;
@@ -141,7 +145,8 @@ pub trait Emplace<T>: Sized + Deref {
         Self::try_emplace(n).unwrap_or_else(|e| match e {})
     }
 
-    /// Constructs a new smart pointer and tries to emplace `n` into its storage.
+    /// Constructs a new smart pointer and tries to emplace `n` into its
+    /// storage.
     fn try_emplace<N: TryNew<Output = T>>(n: N) -> Result<Self::Output, N::Error>;
 }
 

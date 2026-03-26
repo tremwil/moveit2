@@ -22,13 +22,12 @@
 //! `moveit2` revolves around `unsafe trait`s that impose additional guarantees
 //! on `!Unpin` types, such that they can be moved in the C++ sense. There are
 //! two senses of "move" frequently used:
-//! - The Rust sense, which is a blind memcpy and analogous-ish to the
-//!   C++ "std::is_trivially_moveable` type-trait. Rust moves also render the
+//! - The Rust sense, which is a blind memcpy and analogous-ish to the C++
+//!   "std::is_trivially_moveable` type-trait. Rust moves also render the
 //!   moved-from object inaccessible.
 //! - The C++ sense, where a move is really like a mutating `Clone` operation,
 //!   which leave the moved-from value accessible to be destroyed at the end of
 //!   the scope.
-//!   
 //! C++ also has *constructors*, which are special functions that produce a new
 //! value in a particular location. In particular, C++ constructors may assume
 //! that the address of `*this` will not change; all C++ objects are effectively
@@ -185,9 +184,10 @@ pub use cxx_support::MakeCppStorage;
 mod miri_util {
     /// Check if miri is checking aliasing rules with stack borrows.
     ///
-    /// Some tests that manually deallocate Box memory to avoid miri reporting leaks
-    /// do not pass Stacked Borrows due to strict rules around around raw pointer tag
-    /// invalidations, despite being sound under Tree Borrows.
+    /// Some tests that manually deallocate Box memory to avoid miri reporting
+    /// leaks do not pass Stacked Borrows due to strict rules around around
+    /// raw pointer tag invalidations, despite being sound under Tree
+    /// Borrows.
     #[allow(clippy::needless_return)]
     pub(crate) fn stacked_borrows_enabled() -> bool {
         #[cfg(not(miri))]

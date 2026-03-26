@@ -124,7 +124,8 @@ impl<'frame, T> Slot<'frame, T> {
         }
     }
 
-    /// Try to emplace `new` into this slot, returning a new, pinned [`MoveRef`].
+    /// Try to emplace `new` into this slot, returning a new, pinned
+    /// [`MoveRef`].
     pub fn try_emplace<N: TryNew<Output = T>>(
         self,
         new: N,
@@ -233,9 +234,9 @@ impl<'frame, T> DroppingSlot<'frame, T> {
     ///
     /// # Safety
     ///
-    /// This function pins the memory this slot wraps, but does not guarantee its
-    /// destructor is run; that is the caller's responsibility, by decrementing
-    /// the given [`DropFlag`].
+    /// This function pins the memory this slot wraps, but does not guarantee
+    /// its destructor is run; that is the caller's responsibility, by
+    /// decrementing the given [`DropFlag`].
     pub unsafe fn pin(self, val: T) -> (Pin<&'frame mut T>, DropFlag<'frame>) {
         unsafe { self.emplace(new::of(val)) }
     }
@@ -244,9 +245,9 @@ impl<'frame, T> DroppingSlot<'frame, T> {
     ///
     /// # Safety
     ///
-    /// This function pins the memory this slot wraps, but does not guarantee its
-    /// destructor is run; that is the caller's responsibility, by decrementing
-    /// the given [`DropFlag`].
+    /// This function pins the memory this slot wraps, but does not guarantee
+    /// its destructor is run; that is the caller's responsibility, by
+    /// decrementing the given [`DropFlag`].
     pub unsafe fn emplace<N: New<Output = T>>(
         self,
         new: N,
@@ -261,9 +262,9 @@ impl<'frame, T> DroppingSlot<'frame, T> {
     ///
     /// # Safety
     ///
-    /// This function pins the memory this slot wraps, but does not guarantee its
-    /// destructor is run; that is the caller's responsibility, by decrementing
-    /// the given [`DropFlag`].
+    /// This function pins the memory this slot wraps, but does not guarantee
+    /// its destructor is run; that is the caller's responsibility, by
+    /// decrementing the given [`DropFlag`].
     pub unsafe fn try_emplace<N: TryNew<Output = T>>(
         self,
         new: N,

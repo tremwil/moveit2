@@ -74,8 +74,9 @@ impl<'a, T: ?Sized> MoveRef<'a, T> {
     /// # Safety
     ///
     /// `ptr` must satisfy the *longest-lived* criterion: after the return value
-    /// goes out of scope, `ptr` must also be out-of-scope. Calling this function
-    /// correctly is non-trivial, and should be left to [`moveit!()`] instead.
+    /// goes out of scope, `ptr` must also be out-of-scope. Calling this
+    /// function correctly is non-trivial, and should be left to
+    /// [`moveit!()`] instead.
     ///
     /// In particular, if `ptr` outlives the returned `MoveRef`, it will point
     /// to dropped memory, which is UB.
@@ -180,35 +181,40 @@ impl<'a, T> From<MoveRef<'a, T>> for Pin<MoveRef<'a, T>> {
 /// A trait for getting a pinned [`MoveRef`] for some pointer type `Self`.
 ///
 /// Conceptually, this trait is similar to [`DerefMove`], except that where
-/// [`DerefMove::deref_move`] produces a `MoveRef<T>`, [`AsMove::as_move`] produces a
-/// `Pin<MoveRef<T>>`.
+/// [`DerefMove::deref_move`] produces a `MoveRef<T>`, [`AsMove::as_move`]
+/// produces a `Pin<MoveRef<T>>`.
 ///
-/// `DerefMove` can be seen as a refinement of `AsMove` where stronger guarantees about the memory
-/// behavior (specifically the Pin-safety) of `Self` are present.
+/// `DerefMove` can be seen as a refinement of `AsMove` where stronger
+/// guarantees about the memory behavior (specifically the Pin-safety) of `Self`
+/// are present.
 ///
-/// Codifying this notion is the fact that `DerefMove` requires that `Self: DerefMut + AsMove`,
-/// whereas `AsMove` only requires the weaker constraints of `Self: Deref`.
+/// Codifying this notion is the fact that `DerefMove` requires that `Self:
+/// DerefMut + AsMove`, whereas `AsMove` only requires the weaker constraints of
+/// `Self: Deref`.
 ///
-/// Although `AsMove` is a supertrait of `DerefMove`, but `DerefMove` is *not* a supertrait of
-/// `AsMove`, the two traits are nevertheless intended to have their impls for a given type defined
-/// together *simultanteously*.
+/// Although `AsMove` is a supertrait of `DerefMove`, but `DerefMove` is *not* a
+/// supertrait of `AsMove`, the two traits are nevertheless intended to have
+/// their impls for a given type defined together *simultanteously*.
 ///
-/// It is expected in this situation that the impl for one of the traits will be (trivially) defined
-/// in terms of the other, depending on the API for the pointer type `Self` with respect to
-/// [`DerefMut`].
+/// It is expected in this situation that the impl for one of the traits will be
+/// (trivially) defined in terms of the other, depending on the API for the
+/// pointer type `Self` with respect to [`DerefMut`].
 ///
-/// For example, the `Box<T>: AsMove` impl is defined in terms of the `Box<T>: DerefMove` impl,
-/// because it is always the case that `Box<T>: DerefMut` regardless of whether `T: Unpin`. Hence,
-/// `Box<T>: AsMove` simply performs the `Box<T>: DerefMove` operation then subsequently
-/// (and trivially) pins the resulting `MoveRef<T>` with [`MoveRef::into_pin`].
+/// For example, the `Box<T>: AsMove` impl is defined in terms of the `Box<T>:
+/// DerefMove` impl, because it is always the case that `Box<T>: DerefMut`
+/// regardless of whether `T: Unpin`. Hence, `Box<T>: AsMove` simply performs
+/// the `Box<T>: DerefMove` operation then subsequently (and trivially) pins the
+/// resulting `MoveRef<T>` with [`MoveRef::into_pin`].
 ///
-/// On the other hand, the `cxx::UniquePtr<T>: DerefMove` impl is defined in terms of the
-/// `UniquePtr<T>: AsMove` impl, because a `cxx::UniquePtr<T>: DerefMut` only if `T: Unpin`. Given
-/// that `cxx::UniquePtr<T>` behaves like `Pin<Box<T>>` with respect to `DerefMut`, it is always
-/// possible to safely produce a `Pin<MoveRef<T>>`, but *not* always possible to safely produce a
-/// `MoveRef<T>`. Hence, when `T: Unpin`, only then `cxx::UniquePtr<T>: DerefMove` is defined,
-/// which simply performs the `cxx::UniquePtr<T>: AsMove` operation then subsequently
-/// (and trivially) unpins the resulting `Pin<MoveRef<T>>` with [`Pin::into_inner`].
+/// On the other hand, the `cxx::UniquePtr<T>: DerefMove` impl is defined in
+/// terms of the `UniquePtr<T>: AsMove` impl, because a `cxx::UniquePtr<T>:
+/// DerefMut` only if `T: Unpin`. Given that `cxx::UniquePtr<T>` behaves like
+/// `Pin<Box<T>>` with respect to `DerefMut`, it is always possible to safely
+/// produce a `Pin<MoveRef<T>>`, but *not* always possible to safely produce a
+/// `MoveRef<T>`. Hence, when `T: Unpin`, only then `cxx::UniquePtr<T>:
+/// DerefMove` is defined, which simply performs the `cxx::UniquePtr<T>: AsMove`
+/// operation then subsequently (and trivially) unpins the resulting
+/// `Pin<MoveRef<T>>` with [`Pin::into_inner`].
 pub trait AsMove: Deref + Sized {
     /// The "pure storage" form of `Self`, which owns the storage but not the
     /// pointee.
@@ -265,9 +271,10 @@ impl<P: DerefMove> AsMove for Pin<P> {
         unsafe {
             // SAFETY:
             //
-            // It is safe to unwrap the `Pin` because `deref_move()` must not move out of the actual
-            // storage, merely shuffle pointers around, and immediately after the call to `deref_move()`
-            // we repin with `MoveRef::into_pin`, so the `Pin` API invariants are not violated later.
+            // It is safe to unwrap the `Pin` because `deref_move()` must not move out of
+            // the actual storage, merely shuffle pointers around, and
+            // immediately after the call to `deref_move()` we repin with
+            // `MoveRef::into_pin`, so the `Pin` API invariants are not violated later.
             MoveRef::into_pin(P::deref_move(Pin::into_inner_unchecked(self), storage))
         }
     }
@@ -289,14 +296,14 @@ impl<P: DerefMove> AsMove for Pin<P> {
 /// - [`MoveRef<T>`] implements `DerefMove` by definition.
 /// - [`Box<T>`] implements `DerefMove`, since it drops the `T` in its
 ///   destructor.
-/// - [`&mut T`] does *not* implement `DerefMove`, because it is
-///   necessarily a borrow of a longer-lived, "truly owning" reference.
+/// - [`&mut T`] does *not* implement `DerefMove`, because it is necessarily a
+///   borrow of a longer-lived, "truly owning" reference.
 /// - [`Rc<T>`] and [`Arc<T>`] do *not* implement `DerefMove`, because even
-///   though they own their pointees, they are not the *sole* owners. Dropping
-///   a reference-counted pointer need not run the destructor if other pointers
+///   though they own their pointees, they are not the *sole* owners. Dropping a
+///   reference-counted pointer need not run the destructor if other pointers
 ///   are still alive.
-/// - [`Pin<P>`] for `P: DerefMove` implements `DerefMove` only when
-///   `P::Target: Unpin`, since `DerefMove: DerefMut`.
+/// - [`Pin<P>`] for `P: DerefMove` implements `DerefMove` only when `P::Target:
+///   Unpin`, since `DerefMove: DerefMut`.
 ///
 /// # Principle of Operation
 ///
@@ -326,9 +333,10 @@ impl<P: DerefMove> AsMove for Pin<P> {
 ///
 /// ## Worked Example: [`Box<T>`]
 ///
-/// To inhibit the inner destructor of [`Box<T>`], we can use `Box<MaybeUninit<T>>`
-/// as [`AsMove::Storage`]. [`MaybeUninit`] is preferred over [`ManuallyDrop`],
-/// since it helps avoid otherwise scary aliasing problems with `Box<&mut T>`.
+/// To inhibit the inner destructor of [`Box<T>`], we can use
+/// `Box<MaybeUninit<T>>` as [`AsMove::Storage`]. [`MaybeUninit`] is preferred
+/// over [`ManuallyDrop`], since it helps avoid otherwise scary aliasing
+/// problems with `Box<&mut T>`.
 ///
 /// The first step is to "cast" `Box<T>` into `Box<MaybeUninit<T>>` via
 /// [`Box::into_raw()`] and [`Box::from_raw()`]. This is then placed into the
@@ -391,8 +399,9 @@ pub unsafe trait DerefMove: DerefMut + AsMove {
     /// Moves out of `self`, producing a [`MoveRef`] that owns its contents.
     ///
     /// `storage` is a location *somewhere* responsible for rooting the lifetime
-    /// of `*this`'s storage. The location is unimportant, so long as it outlives
-    /// the resulting [`MoveRef`], which is enforced by the type signature.
+    /// of `*this`'s storage. The location is unimportant, so long as it
+    /// outlives the resulting [`MoveRef`], which is enforced by the type
+    /// signature.
     ///
     /// [`moveit!()`] provides a convenient syntax for calling this function.
     fn deref_move<'frame>(
@@ -416,8 +425,8 @@ unsafe impl<'a, T: ?Sized> DerefMove for MoveRef<'a, T> {
     }
 }
 
-/// Note that `DerefMove` cannot be used to move out of a `Pin<P>` when `P::Target: !Unpin`.
-/// ```compile_fail
+/// Note that `DerefMove` cannot be used to move out of a `Pin<P>` when
+/// `P::Target: !Unpin`. ```compile_fail
 /// # use crate::{moveit2::{Emplace, MoveRef, moveit}};
 /// # use core::{marker::PhantomPinned, pin::Pin};
 /// // Fails to compile because `Box<PhantomPinned>: Deref<Target = PhantomPinned>` and `PhantomPinned: !Unpin`.
