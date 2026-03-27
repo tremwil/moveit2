@@ -1,133 +1,162 @@
-//! Flexible proc-macro based in-place construction.
+//! Flexible proc-macro based in-place construction of structs.
 //!
-//! While the factory functions provided by the [`new`](crate::new) module make
-//! it easy to safely define in-place constructors (e.g. via
-//! [`new::by`](crate::new::by)), Thanks to [`New::with`](crate::TryNew::with),
-//! we can even write constructors for [`!Unpin`](Unpin) types without any
-//! unsafe code.
+//! ## Quick Start
 //!
-//! However, this approach has a fundamental limitation: It must be possible to
-//! construct a valid instance of the struct in an unpinned state, so that it
-//! can be moved into the pinned memory before the `with` clause initializes the
-//! address-sensitive state. However, when such a state does not exist, we have
-//! to rely on the unsafe [`new::by_raw`](crate::new::by_raw):
+//! Simply apply the [`Ctor`] derive macro on your struct:
 //!
-//! ```ignore
-//! use moveit2::{moveit, new, New};
+//! ```
+//! # struct PinnedData;
+//! use moveit2::Ctor;
 //!
+//! // this derive is compatible (and pairs effectively) with the
+//! // pin-project crate, but it is not required in any way.
 //! #[pin_project::pin_project]
-//! pub struct SelfRef<T> {
-//!     #[pin] // this field is structurally pinned!
-//!     val: T,
-//!     val_ptr: *mut T
-//! }
-//!
-//! impl<T> SelfRef<T> {
-//!     pub fn new(val_new: impl New<Output = T>) -> impl New<Output = Self> {
-//!         unsafe {
-//!             new::by_raw(|this| {
-//!                 // `this` is a `Pin<&mut MaybeUninit<Self>>`, so to emplace `val_new`
-//!                 // we have to...
-//!                 // 1. into_inner the pin (unsafe)
-//!                 // 2. turn the reference into a raw pointer and project to `this.val`
-//!                 //    without creating a reference
-//!                 // 3. cast that pointer to a MaybeUninit<T> and then back into a
-//!                 //    mutable reference (unsafe)
-//!                 // 4. pin that reference (unsafe)
-//!                 todo!()
-//!             })
-//!         }
-//!     }
+//! #[derive(moveit2::Ctor)]
+//! pub struct Immovable {
+//!     #[pin]
+//!     foo: PinnedData,
+//!     bar: String
 //! }
 //! ```
 //!
-//! The above is messy and error-prone. In comparison, by annotating `SelfRef`
-//! with the [`Ctor`] derive macro we get a `ctor` function that allows doing
-//! the above in a completely safe manner:
+//! This generates the member functions called `ctor` and `try_ctor` for
+//! in-place initializing it field by field in a safe manner. These
+//! functions take a [`FnOnce`] closure whose input is the set of fields
+//! to initialize, with the output being a *proof of initialization*: A type
+//! that can only be constructed by initializing every input field.
 //!
 //! ```
-//! # use moveit2::{moveit, new, New};
-//! #
-//! # #[derive(moveit2::Ctor)]
+//! # struct PinnedData;
+//! # use moveit2::Ctor;
 //! # #[pin_project::pin_project]
-//! # pub struct SelfRef<T> {
-//! #    #[pin]
-//! #    val: T,
-//! #    val_ptr: *mut T
+//! # #[derive(moveit2::Ctor)]
+//! # pub struct Immovable {
+//! #     #[pin]
+//! #     foo: PinnedData,
+//! #     bar: String
 //! # }
-//! #
-//! use moveit2::InitProof;
+//! use moveit2::{New, InitProof};
 //!
-//! impl<T> SelfRef<T> {
-//!     pub fn new(val_new: impl New<Output = T>) -> impl New<Output = Self> {
+//! impl Immovable {
+//!     pub fn new(foo: impl New<Output = PinnedData>, bar: String) -> impl New<Output = Self> {
 //!         Self::ctor(|fields| InitProof::<Self> {
-//!             // `fields` gives us pointers that Deref into `MaybeUninit`s to
-//!             // take addresses/etc:
-//!             val_ptr: fields.val_ptr.put(fields.val.as_ptr().cast_mut()),
-//!             // simultaneously they are what we emplace fields into:
-//!             val: fields.val.emplace(val_new)
+//!             foo: fields.foo.emplace(foo),
+//!             bar: fields.bar.put(bar)
 //!         })
 //!     }
 //! }
 //! ```
 //!
-//! ...or even more concisely using the higher-level [`ctor`] declarative
-//! macro:
+//! Alternatively, the [`ctor`] and [`try_ctor`] macros can make this
+//! initialization even more terse:
 //!
 //! ```
-//! # use moveit2::{moveit, new, New};
-//! #
-//! # #[derive(moveit2::Ctor)]
+//! # struct PinnedData;
+//! # use moveit2::{New, Ctor, InitProof, ctor};
 //! # #[pin_project::pin_project]
-//! # pub struct SelfRef<T> {
-//! #    #[pin]
-//! #    val: T,
-//! #    val_ptr: *mut T
+//! # #[derive(moveit2::Ctor)]
+//! # pub struct Immovable {
+//! #     #[pin]
+//! #     foo: PinnedData,
+//! #     bar: String
 //! # }
-//! #
-//! impl<T> SelfRef<T> {
-//!     pub fn new(val_new: impl New<Output = T>) -> impl New<Output = Self> {
-//!         moveit2::ctor!(Self {
-//!             val: val_new,
-//!             // we effectively have full access to a `Pin<&mut T>` here!
-//!             // Note that since `T` may be `!Unpin`, we can't use `&raw mut`.
-//!             val_ptr: (&raw const *val).cast_mut(),
-//!         })
+//! impl Immovable {
+//!     pub fn new(foo: impl New<Output = PinnedData>, bar: String) -> impl New<Output = Self> {
+//!         moveit2::ctor!(Self { foo, bar })
 //!     }
 //! }
 //! ```
 //!
-//! # How it Works
+//! These use a powerful trick known as [autoderef specialization] to
+//! automatically tell whether the input is a [`New`] or [`TryNew`] that needs
+//! to be emplaced, or a plain value that can be moved into the field.
+//!
+//! The `ctor` and `try_ctor` functions and macros have the minimum visibility
+//! of the struct and its fields, so only code that has full access to the
+//! internals of the struct can call them.
+//!
+//! ## How it Works
+//!
+//! ### The [`Ctor`] derive macro
+//!
+//! the `Ctor` derive macro generates two field projections that are part of the
+//! [`Ctor`] trait:
+//! - [`Self::Fields<'a>`], a projection to [`Uninit`] pointers;
+//! - [`Self::Proof<'a>`], a projection to [`PinInit`] pointers.
+//!
+//! These are the input and output types of the `ctor` function, respectively.
+//! The only way to construct a `Proof` value is by calling initializer methods
+//! on each field of the input `Fields` value. By forcing this initialization to
+//! occur in a `FnOnce` that is generic over the projection lifetime, we can
+//! guarantee that the struct was fully initialized without any unsafe code.
 //!
 //! ### The [`Uninit`] type
 //!
 //! `Uninit` represents a struct field that is uninitialized. It has an API
-//! similar to a [`Slot`](crate::Slot), but exposes the underlying
-//! [`MaybeUninit`] immutably to help with unsafe code, and is tagged with
-//! a marker type that uniquely identifies the field it points to.
+//! similar to a [`Slot`](crate::Slot), but
+//! - Is tagged with a marker type that uniquely represents the field;
+//! - Provides a [raw pointer to the field](Uninit::as_ptr) to help with
+//!   constructing self-referential structs.
 //!
 //! `Uninit`s are exposed to the closure passed to the `ctor` function via
 //! the input argument.
 //!
 //! ### The [`PinInit`] type
 //!
-//! `PinInit` is similar to a `Pin<MoveRef<T>>`, but tagged with a marker
-//! type that uniquely identifies the field it points to. It is called
-//! a *proof of initialization* because the only way to construct it is
+//! `PinInit` is similar to a [`Pin<MoveRef<T>>`](crate::MoveRef), but tagged
+//! with a marker type that uniquely identifies the field it points to. It is
+//! called a *proof of initialization* because the only way to construct it is
 //! by successfully emplacing into its corresponding [`Uninit`].
 //!
-//! ### The [`Ctor`] derive macro
+//! ## Motivation
 //!
-//! `Ctor` generates two field projections that are part of the [`Ctor`] trait:
-//! - [`Self::Fields<'a>`], a projection to [`Uninit`] pointers;
-//! - [`Self::Proof<'a>`], a projection to [`PinInit`] pointers.
+//! The factory functions provided by the [`new`](crate::new) module make
+//! it easy to safely define in-place constructors (e.g. via
+//! [`new::by`](crate::new::by)). Thanks to [`New::with`](crate::TryNew::with),
+//! we can even write constructors for [`!Unpin`](Unpin) types without any
+//! unsafe code.
 //!
-//! As such the only way to construct a `Proof` value is by initializing each
-//! field of a `Fields` type. By forcing this initialization to occur in a
-//! `FnOnce` that is generic over the projection lifetime, we can guarantee
-//! that the struct was fully initialized without any unsafe code.
+//! However, this approach has a fundamental limitation: It must be possible to
+//! construct a valid instance of the struct in an unpinned state, so that it
+//! can be moved into the pinned memory before the `with` clause initializes the
+//! address-sensitive state. For the above `Immovable` example, for instance,
+//! we would have to use [`new::by_raw`](crate::new::by_raw) with a copious
+//! amount of `unsafe` code:
 //!
-//! This is how the `ctor` and `try_ctor` member functions work.
+//! ```
+//! # struct PinnedData;
+//! use core::{pin::Pin, mem::MaybeUninit};
+//! use moveit2::{new, New};
+//!
+//! #[pin_project::pin_project]
+//! #[derive(moveit2::Ctor)]
+//! pub struct Immovable {
+//!     #[pin]
+//!     foo: PinnedData,
+//!     bar: String
+//! }
+//!
+//! impl Immovable {
+//!     pub fn new(foo: impl New<Output = PinnedData>, bar: String) -> impl New<Output = Self> {
+//!         unsafe {
+//!             // note: `this` is a Pin<&mut MaybeUninit<Self>>
+//!             new::by_raw::<Self, _>(|this| {
+//!                 // 1. get a raw pointer
+//!                 let this_ptr = Pin::into_inner_unchecked(this).as_mut_ptr();
+//!                 // 2. get a pointer to the `foo` field and cast to MaybeUninit
+//!                 let foo_ptr = (&raw mut (*this_ptr).foo).cast::<MaybeUninit<PinnedData>>();
+//!                 // 3. convert foo_ptr to a pinned reference so it can be initialized
+//!                 foo.new(Pin::new_unchecked(&mut *foo_ptr));
+//!                 // 4. write the `bar` value to its field
+//!                 (&raw mut (*this_ptr).bar).write(bar);
+//!             })
+//!         }
+//!     }
+//! }
+//! ```
+//!
+//! The above is messy and error-prone. For example, it would still compile if
+//! we changed the type of `foo`, or we added a new field!
 //!
 //! # Partial Initialization
 //!
@@ -154,74 +183,16 @@
 //! - Due to the above, the `try_ctor` macro requires explicitly specifying the
 //!   error type before the struct expression/closure.
 //!
-//! # Examples
-//!
-//! ### Infallible constructors
-//!
-//! ```
-//! use core::marker::PhantomPinned;
-//! use moveit2::{Ctor, InitProof, moveit, new};
-//!
-//! #[derive(Ctor)]
-//! pub struct Immovable {
-//!     val: String,
-//!     addr_of_val: *const String,
-//! }
-//!
-//! let string_ctor = new::of("abcdef".to_string());
-//!
-//! let immovable_ctor = Immovable::ctor(|fields| InitProof::<Immovable> {
-//!     // `put` to move something into the field
-//!     addr_of_val: fields.addr_of_val.put(fields.val.as_ptr()),
-//!     // `emplace` to construct into the field without moving
-//!     val: fields.val.emplace(string_ctor),
-//! });
-//!
-//! moveit!(let immovable = immovable_ctor);
-//! assert_eq!(&raw const immovable.val, immovable.addr_of_val);
-//! ```
-//!
-//! ### Fallible constructors
-//!
-//! ```
-//! # fn main() -> Result<(), ()> {
-//! #
-//! use core::marker::PhantomPinned;
-//! use moveit2::{Ctor, InitProof, slot, new};
-//!
-//! #[derive(Ctor)]
-//! pub struct Immovable {
-//!     val: String,
-//!     addr_of_val: *const String,
-//! }
-//!
-//! let string_ctor = new::try_by(|| Ok::<_, ()>("abcdef".to_string()));
-//!
-//! let immovable_ctor = Immovable::try_ctor(|fields| -> Result<_, ()> {
-//!     Ok(InitProof::<Immovable> {
-//!         // `put` to move something into the field
-//!         addr_of_val: fields.addr_of_val.put(fields.val.as_ptr()),
-//!         // `try_emplace` to try to construct into the field without moving
-//!         val: fields.val.try_emplace(string_ctor)?,
-//!     })
-//! });
-//!
-//! slot!(immovable);
-//! let immovable = immovable.try_emplace(immovable_ctor)?;
-//! assert_eq!(&raw const immovable.val, immovable.addr_of_val);
-//! #
-//! # Ok(())
-//! # }
-//! ```
-//!
 //! [`Self::Fields<'a>`]: Ctor::Fields
 //! [`Self::Proof<'a>`]: Ctor::Proof
+//! [autoderef specialization]: https://lukaskalbertodt.github.io/2019/12/05/generalized-autoref-based-specialization.html
 
 use core::{
     marker::PhantomData,
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
     pin::Pin,
+    ptr::NonNull,
 };
 
 use crate::{New, TryNew, drop_flag::DropFlag};
@@ -257,11 +228,13 @@ pub use moveit2_proc_macros::Ctor;
 /// assert_eq!(&raw const self_ref.value, self_ref.value_ptr);
 /// ```
 ///
+/// See the [module-level documentation](mod@crate::ctor) for more information.
+///
 /// # Limitations
 ///
 /// Due to [type system restrictions around higher-kinded lifetimes](https://users.rust-lang.org/t/for-a-a-t-seems-to-require-t-static/137175/5?u=tremwil)
 /// and the poor type inference of workarounds to said restrictions, the
-/// [`Ctor`] trait does not expose the constructor function on types itself.
+/// [`Ctor`] trait does not expose the constructor functions itself.
 pub trait Ctor: Sized {
     /// A projection of the uninitialized fields of `Self`.
     ///
@@ -293,25 +266,20 @@ pub type InitProof<'a, T> = <T as Ctor>::Proof<'a>;
 /// A [`Slot`] referencing an uninitialized field of a struct represented by
 /// some marker type `F`.
 ///
-/// This can [`Deref`] into a [`MaybeUninit`], but only immutably. To initialize
-/// the field, use the [`put`], [`emplace`] and [`try_emplace`] methods.
+/// To initialize the field, use the [`put`], [`emplace`] and [`try_emplace`]
+/// methods. It is also possible to get a raw pointer to the field via
+/// [`as_ptr`] and [`as_non_null`].
 ///
 /// [`Slot`]: crate::Slot
 /// [`put`]: Uninit::put
 /// [`emplace`]: Uninit::emplace
 /// [`try_emplace`]: Uninit::try_emplace
+/// [`as_ptr`]: Uninit::as_ptr
+/// [`as_non_null`]: Uninit::as_non_null
 pub struct Uninit<'a, T, F> {
     slot: &'a mut MaybeUninit<T>,
     drop_flag: DropFlag<'a>,
     phantom: PhantomData<F>,
-}
-
-impl<'a, T, F> Deref for Uninit<'a, T, F> {
-    type Target = MaybeUninit<T>;
-
-    fn deref(&self) -> &Self::Target {
-        self.slot
-    }
 }
 
 impl<'a, T, F> Uninit<'a, T, F> {
@@ -336,16 +304,49 @@ impl<'a, T, F> Uninit<'a, T, F> {
         }
     }
 
-    /// Initialize this slot by moving a value into it.
-    #[inline]
-    pub fn put(self, value: T) -> PinInit<'a, T, F> {
-        self.slot.write(value);
+    /// Get a mutable pointer to this field's uninitialized memory.
+    ///
+    /// After writing an initialized value to this pointer, [`assume_init`] must
+    /// be called to get a proof of initialization.
+    ///
+    /// [`assume_init`]: Self::assume_init
+    pub fn as_ptr(&self) -> *mut T {
+        (&raw const *self.slot) as *mut T
+    }
+
+    /// Get a [`NonNull`] pointer to this field's uninitialized memory.
+    ///
+    /// After writing an initialized value to this pointer, [`assume_init`] must
+    /// be called to get a proof of initialization.
+    ///
+    /// [`assume_init`]: Self::assume_init
+    pub fn as_non_null(&self) -> NonNull<T> {
+        NonNull::from_ref(self.slot).cast()
+    }
+
+    /// Unsafely assume that this field has been initialized.
+    ///
+    /// # Safety
+    ///
+    /// A valid, initialized `T` must have been written to the pointer
+    /// returned by [`as_ptr`] or [`as_non_null`].
+    ///
+    /// [`as_ptr`]: Self::as_ptr
+    /// [`as_non_null`]: Self::as_non_null
+    pub unsafe fn assume_init(self) -> PinInit<'a, T, F> {
         self.drop_flag.inc();
         // SAFETY:
         // - slot is initialized
         // - `Init` can be pinned as drop flag will prevent data from being
         // forgotten after pinning (promise of new_unchecked)
         unsafe { Pin::new_unchecked(Init(self)) }
+    }
+
+    /// Initialize this slot by moving a value into it.
+    #[inline]
+    pub fn put(self, value: T) -> PinInit<'a, T, F> {
+        self.slot.write(value);
+        unsafe { self.assume_init() }
     }
 
     /// Initialize this slot by constructing a value inside of it.
@@ -369,8 +370,7 @@ impl<'a, T, F> Uninit<'a, T, F> {
         unsafe {
             let pinned_slot = Pin::new_unchecked(&mut *self.slot);
             new.try_new(pinned_slot)?;
-            self.drop_flag.inc();
-            Ok(Pin::new_unchecked(Init(self)))
+            Ok(self.assume_init())
         }
     }
 }
@@ -412,7 +412,7 @@ impl<'a, T, F> Drop for Init<'a, T, F> {
 
 /// Create a [`New`] implementation for initializing a struct field by field.
 ///
-/// The struct must implemented [`Ctor`] through the derive macro for this to
+/// The struct must implement [`Ctor`] through the derive macro for this to
 /// work.
 #[macro_export]
 macro_rules! ctor {
