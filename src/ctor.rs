@@ -416,47 +416,45 @@ impl<'a, T, F> Drop for Init<'a, T, F> {
 /// work.
 #[macro_export]
 macro_rules! ctor {
-    ($struct:ty { $($tokens:tt)* }) => {
-        $crate::ctor!(|__fields| $struct {
-            $($tokens)*
-        })
+    (move || $struct:ty { $($tokens:tt)* }) => {
+        $crate::ctor!(@gather_stmt[move][__fields]{}{ $struct { $($tokens)* } })
     };
 
-    (|$fields:ident| $struct:ty {
-            $($(#[$attrs:meta])* $field:ident $(:$expr:expr)?),*
-            $(,)?
-    }) => {
-        <$struct>::ctor(|$fields| {
-            use $crate::ctor::__private::{
-                ViaEmplace as _,
-                ViaPut as _
-            };
-
-            $(
-                $crate::ctor!(@assign_field[$fields]($(#[$attrs])* $field $(:$expr)?));
-            )*
-
-            $crate::ctor::InitProof::<$struct> {
-                $($(#[$attrs])* $field),*
-            }
-        })
+    (move |$fields:ident| $struct:ty { $($tokens:tt)* }) => {
+        $crate::ctor!(@gather_stmt[move][$fields]{}{ $struct { $($tokens)* } })
     };
 
-    ({ $($tokens:tt)* }) => {
-        $crate::ctor!(|__fields| { $($tokens)* })
+    (move || { $($tokens:tt)* }) => {
+        $crate::ctor!(@gather_stmt[move][__fields]{}{ $($tokens)* })
+    };
+
+    (move |$fields:ident| { $($tokens:tt)* }) => {
+        $crate::ctor!(@gather_stmt[move][$fields]{}{ $($tokens)* })
+    };
+
+    ($(||)? $struct:ty { $($tokens:tt)* }) => {
+        $crate::ctor!(@gather_stmt[][__fields]{}{ $struct { $($tokens)* } })
+    };
+
+    (|$fields:ident| $struct:ty { $($tokens:tt)* }) => {
+        $crate::ctor!(@gather_stmt[][$fields]{}{ $struct { $($tokens)* } })
+    };
+
+    ($(||)? { $($tokens:tt)* }) => {
+        $crate::ctor!(@gather_stmt[][__fields]{}{ $($tokens)* })
     };
 
     (|$fields:ident| { $($tokens:tt)* }) => {
-        $crate::ctor!(@gather_stmt[$fields]{}{ $($tokens)* })
+        $crate::ctor!(@gather_stmt[][$fields]{}{ $($tokens)* })
     };
 
-    (@gather_stmt[$fields:ident]{ $($statements:stmt)* }{
+    (@gather_stmt[$($mov:tt)?][$fields:ident]{ $($statements:stmt)* }{
         $struct:ty {
             $($(#[$attrs:meta])* $field:ident $(:$expr:expr)?),*
             $(,)?
         }
     }) => {
-        <$struct>::ctor(|$fields| {
+        <$struct>::ctor($($mov)? |$fields| {
             $($statements;)*
 
             use $crate::ctor::__private::{
@@ -474,11 +472,11 @@ macro_rules! ctor {
         })
     };
 
-    (@gather_stmt[$fields:ident]{ $($statements:stmt)* }{
+    (@gather_stmt[$($mov:tt)?][$fields:ident]{ $($statements:stmt)* }{
         $stmt:stmt;
         $($tokens:tt)*
     }) => {
-        $crate::ctor!(@gather_stmt[$fields]{$($statements;)* $stmt; }{ $($tokens)* })
+        $crate::ctor!(@gather_stmt[$($mov)?][$fields]{$($statements;)* $stmt; }{ $($tokens)* })
     };
 
     (@assign_field[$fields:ident]($(#[$attrs:meta])* $field:ident)) => {
@@ -505,47 +503,45 @@ pub use ctor;
 /// work.
 #[macro_export]
 macro_rules! try_ctor {
-    ($err:ty, $struct:ty { $($tokens:tt)* }) => {
-        $crate::try_ctor!($err, |__fields| $struct {
-            $($tokens)*
-        })
-    };
-    ($err:ty, |$fields:ident| $struct:ty {
-            $($(#[$attrs:meta])* $field:ident $(:$expr:expr)?),*
-            $(,)?
-    }) => {
-        <$struct>::try_ctor::<$err, _>(|$fields| {
-            use $crate::ctor::__private::{
-                TryViaTryEmplace as _,
-                TryViaEmplace as _,
-                TryViaPut as _
-            };
-
-            $(
-                $crate::try_ctor!(@assign_field[$err, $fields]($(#[$attrs])* $field $(:$expr)?));
-            )*
-
-            Ok($crate::ctor::InitProof::<$struct> {
-                $($(#[$attrs])* $field),*
-            })
-        })
+    ($err:ty, move || $struct:ty { $($tokens:tt)* }) => {
+        $crate::try_ctor!(@gather_stmt[move][$err, __fields]{}{ $struct { $($tokens)* } })
     };
 
-    ($err:ty, { $($tokens:tt)* }) => {
-        $crate::try_ctor!($err:ty, |__fields| { $($tokens)* })
+    ($err:ty, move |$fields:ident| $struct:ty { $($tokens:tt)* }) => {
+        $crate::try_ctor!(@gather_stmt[move][$err, $fields]{}{ $struct { $($tokens)* } })
+    };
+
+    ($err:ty, move || { $($tokens:tt)* }) => {
+        $crate::try_ctor!(@gather_stmt[move][$err, __fields]{}{ $($tokens)* })
+    };
+
+    ($err:ty, move |$fields:ident| { $($tokens:tt)* }) => {
+        $crate::try_ctor!(@gather_stmt[move][$err, $fields]{}{ $($tokens)* })
+    };
+
+    ($err:ty, $(||)? $struct:ty { $($tokens:tt)* }) => {
+        $crate::try_ctor!(@gather_stmt[][$err, __fields]{}{ $struct { $($tokens)* } })
+    };
+
+    ($err:ty, |$fields:ident| $struct:ty { $($tokens:tt)* }) => {
+        $crate::try_ctor!(@gather_stmt[][$err, $fields]{}{ $struct { $($tokens)* } })
+    };
+
+    ($err:ty, $(||)? { $($tokens:tt)* }) => {
+        $crate::try_ctor!(@gather_stmt[][$err, __fields]{}{ $($tokens)* })
     };
 
     ($err:ty, |$fields:ident| { $($tokens:tt)* }) => {
-        $crate::try_ctor!(@gather_stmt[$err, $fields]{}{ $($tokens)* })
+        $crate::try_ctor!(@gather_stmt[][$err, $fields]{}{ $($tokens)* })
     };
 
-    (@gather_stmt[$err:ty, $fields:ident]{ $($statements:stmt)* }{
+    (@gather_stmt[$($mov:tt)?][$err:ty, $fields:ident]{ $($statements:stmt)* }{
         $struct:ty {
             $($(#[$attrs:meta])* $field:ident $(:$expr:expr)?),*
             $(,)?
         }
     }) => {
-        <$struct>::try_ctor::<$err, _>(|$fields| {
+        <$struct>::try_ctor::<$err, _>($($mov)? |$fields| {
             $($statements;)*
 
             use $crate::ctor::__private::{
@@ -564,11 +560,11 @@ macro_rules! try_ctor {
         })
     };
 
-    (@gather_stmt[$err:ty, $fields:ident]{ $($statements:stmt)* }{
+    (@gather_stmt[$($mov:tt)?][$err:ty, $fields:ident]{ $($statements:stmt)* }{
         $stmt:stmt;
         $($tokens:tt)*
     }) => {
-        $crate::try_ctor!(@gather_stmt[$err, $fields]{$($statements;)* $stmt; }{ $($tokens)* })
+        $crate::try_ctor!(@gather_stmt[$($mov)?][$err, $fields]{$($statements;)* $stmt; }{ $($tokens)* })
     };
 
     (@assign_field[$err:ty, $fields:ident]($(#[$attrs:meta])* $field:ident)) => {
