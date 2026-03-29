@@ -274,7 +274,7 @@ impl TrappedFlag {
             fn drop(&mut self) {
                 // In tests, we don't double-panic so that we can observe the
                 // failure correctly.
-                if cfg!(not(test)) {
+                if cfg!(not(any(test, moveit2_no_drop_flag_abort))) {
                     panic!()
                 }
             }

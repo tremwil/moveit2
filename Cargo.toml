@@ -54,6 +54,12 @@ path = "moveit2-proc-macros"
 [dev-dependencies]
 pin-project = "1.1.11"
 
+[lints.rust.unexpected_cfgs]
+level = "warn"
+# This cfg allows testing trap flag aborts in integration tests.
+# It should NEVER be used in other scenarios, as it is UNSOUND!
+check-cfg = ['cfg(moveit2_no_drop_flag_abort)']
+
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
