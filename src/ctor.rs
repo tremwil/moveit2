@@ -636,7 +636,8 @@ hidden_macro_internals!(
 
                 use $crate::ctor::__private::{
                     ViaEmplace as _,
-                    ViaPut as _
+                    ViaPut as _,
+                    ViaNever as _,
                 };
 
                 $(
@@ -658,14 +659,14 @@ hidden_macro_internals!(
 
         (@assign_field[$fields:ident]($(#[$attrs:meta])* $field:ident)) => {
             $(#[$attrs])*
-            let mut $field = (&&$crate::ctor::__private::CtorSpec::new(&$fields.$field, &$field))
+            let mut $field = (&&&$crate::ctor::__private::CtorSpec::new(&$fields.$field, &$field))
                 .init($fields.$field, $field);
         };
 
         (@assign_field[$fields:ident]($(#[$attrs:meta])* $field:ident: $expr:expr)) => {
             $(#[$attrs])*
             let mut $field = match $expr {
-                __expr => (&&$crate::ctor::__private::CtorSpec::new(&$fields.$field, &__expr))
+                __expr => (&&&$crate::ctor::__private::CtorSpec::new(&$fields.$field, &__expr))
                     .init($fields.$field, __expr)
             };
         };
@@ -787,7 +788,8 @@ hidden_macro_internals!(
                 use $crate::ctor::__private::{
                     TryViaTryEmplace as _,
                     TryViaEmplace as _,
-                    TryViaPut as _
+                    TryViaPut as _,
+                    TryViaNever as _,
                 };
 
                 $(
@@ -810,7 +812,7 @@ hidden_macro_internals!(
         (@assign_field[$err:ty, $fields:ident]($(#[$attrs:meta])* $field:ident)) => {
             $(#[$attrs])*
             let mut $field = (
-                &&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new(&$fields.$field, &$field)
+                &&&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new(&$fields.$field, &$field)
             ).try_init($fields.$field, $field)?;
         };
 
@@ -818,7 +820,7 @@ hidden_macro_internals!(
             $(#[$attrs])*
             let mut $field = match $expr {
                 __expr => (
-                    &&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new(&$fields.$field, &__expr)
+                    &&&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new(&$fields.$field, &__expr)
                 ).try_init($fields.$field, __expr)?
             };
         };
@@ -855,6 +857,20 @@ pub mod __private {
         }
     }
 
+    pub trait ViaNever<T, F, U> {
+        fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> PinInit<'a, T, F>;
+    }
+
+    impl<T, F, U> ViaNever<T, F, U> for &&CtorSpec<T, F, U>
+    where
+        U: Into<Infallible>,
+    {
+        fn init<'a>(&self, _uninit: Uninit<'a, T, F>, src: U) -> PinInit<'a, T, F> {
+            #[allow(unreachable_code)]
+            match src.into() {}
+        }
+    }
+
     pub trait ViaEmplace<T, F, U> {
         fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> PinInit<'a, T, F>;
     }
@@ -885,6 +901,20 @@ pub mod __private {
         #[inline]
         pub fn new<'a>(_uninit: &Uninit<'a, T, F>, _src: &U) -> Self {
             Self(PhantomData)
+        }
+    }
+
+    pub trait TryViaNever<T, F, U, E> {
+        fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> Result<PinInit<'a, T, F>, E>;
+    }
+
+    impl<T, F, U, E> TryViaNever<T, F, U, E> for &&&TryCtorSpec<T, F, U, E>
+    where
+        U: Into<Infallible>,
+    {
+        fn try_init<'a>(&self, _uninit: Uninit<'a, T, F>, src: U) -> Result<PinInit<'a, T, F>, E> {
+            #[allow(unreachable_code)]
+            match src.into() {}
         }
     }
 
