@@ -1,4 +1,4 @@
-use moveit2::{Ctor, Emplace, ctor, new, try_ctor};
+use moveit2::{Ctor, Emplace, ctor, new};
 use pin_project::pin_project;
 
 #[derive(Ctor)]
@@ -25,6 +25,9 @@ fn basic_construction() {
 #[test]
 #[should_panic]
 fn pin_leak_aborts() {
+    use moveit2::try_ctor;
+
+    #[allow(unreachable_code)]
     let _ = Box::try_emplace(try_ctor!(
         (),
         SelfRef::<_> {
