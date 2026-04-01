@@ -23,7 +23,7 @@
 //! on `!Unpin` types, such that they can be moved in the C++ sense. There are
 //! two senses of "move" frequently used:
 //! - The Rust sense, which is a blind memcpy and analogous-ish to the C++
-//!   "std::is_trivially_moveable` type-trait. Rust moves also render the
+//!   `std::is_trivially_moveable` type-trait. Rust moves also render the
 //!   moved-from object inaccessible.
 //! - The C++ sense, where a move is really like a mutating `Clone` operation,
 //!   which leave the moved-from value accessible to be destroyed at the end of
@@ -126,6 +126,15 @@
 //! rule, functions which, in Rust, would normally construct and return a value
 //! should return `impl New` instead. This is analogous to have `async fn`s and
 //! `.iter()` functions work.
+//!
+//! ## In-place Struct Construction
+//!
+//! Outside of `new::` helpers, when the `ctor` feature is enabled this crate
+//! also provides a [`mod@ctor`] module for creating struct constructors that
+//! can in-place initialize fields, all without `unsafe` code. This is primarly
+//! done through the [`Ctor`] derive macro and [`macro@ctor`] and [`try_ctor`]
+//! declarative macros. See [the `ctor` module documentation](mod@ctor) for more
+//! information.
 //!
 //! # Emplacement
 //!
