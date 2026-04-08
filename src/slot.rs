@@ -131,8 +131,8 @@ impl<'frame, T> Slot<'frame, T> {
         new: N,
     ) -> Result<Pin<MoveRef<'frame, T>>, N::Error> {
         unsafe {
-            self.drop_flag.inc();
             new.try_new(Pin::new_unchecked(self.ptr))?;
+            self.drop_flag.inc();
             Ok(MoveRef::into_pin(MoveRef::new_unchecked(
                 self.ptr.assume_init_mut(),
                 self.drop_flag,
@@ -269,9 +269,9 @@ impl<'frame, T> DroppingSlot<'frame, T> {
         self,
         new: N,
     ) -> Result<(Pin<&'frame mut T>, DropFlag<'frame>), N::Error> {
-        self.drop_flag.inc();
         unsafe {
             new.try_new(Pin::new_unchecked(self.ptr))?;
+            self.drop_flag.inc();
             Ok((
                 Pin::new_unchecked(self.ptr.assume_init_mut()),
                 self.drop_flag,

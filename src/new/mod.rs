@@ -46,8 +46,14 @@ pub use move_new::*;
 ///
 /// # Safety
 ///
-/// [`TryNew::try_new()`] must leave its destination argument in a valid,
-/// initialized state when it returns `Ok`.
+/// - [`TryNew::try_new()`] must leave its destination argument in a valid,
+///   initialized state when it returns `Ok`.
+///
+/// - If [`TryNew::try_new()`] successfully initializes its argument and
+///   constructs a pinning reference to it, it is considered to own the value
+///   until returning `Ok`. This has soundness implications for `!Unpin` types:
+///   a `this` that has been exposed as a `Pin<Ptr<Self::Output>>` *must* be
+///   dropped if the function panics or returns `Err`.
 #[must_use = "`New`s do nothing until emplaced into storage"]
 pub unsafe trait TryNew: Sized {
     /// The type to construct.
@@ -220,6 +226,8 @@ impl<E> IntoResult<E> for Result<(), E> {
 #[doc(hidden)]
 pub struct With<N, F>(N, F);
 
+// SAFETY:
+// - `this` is left in a valid state when `try_new` returns `Ok`.
 unsafe impl<N: TryNew, F, R> TryNew for With<N, F>
 where
     F: FnOnce(Pin<&mut N::Output>) -> R,
@@ -233,10 +241,31 @@ where
         self,
         mut this: Pin<&mut MaybeUninit<Self::Output>>,
     ) -> Result<(), Self::Error> {
+        // SAFETY: `this` is freshly created memory by `try_new` invariants.
         unsafe { self.0.try_new(this.as_mut())? };
+
         // Now that `new()` has returned, we can assume `this` is initialized.
+        // However, since we own the initialized pinning reference, we *must* drop the
+        // value on errors or panics!
+
+        struct DropGuard<T>(*mut T);
+        impl<T> Drop for DropGuard<T> {
+            fn drop(&mut self) {
+                unsafe { core::ptr::drop_in_place(self.0) };
+            }
+        }
+
+        let drop_guard = DropGuard(this.as_ptr().cast_mut());
+
+        // SAFETY:
+        // - `this` is initialized
+        // - if the operation fails due to `F` panicking or returning Err, `drop_guard`
+        //   will be dropped, thus dropping the pointee of `this`.
+        // - if the operation succeeds, `drop_guard` is forgotten so the initialized
+        //   value is not mistakenly dropped.
         let this = unsafe { this.map_unchecked_mut(|x| x.assume_init_mut()) };
-        IntoResult::into_result((self.1)(this))
+
+        IntoResult::into_result((self.1)(this)).inspect(|_| core::mem::forget(drop_guard))
     }
 }
 

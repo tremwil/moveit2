@@ -21,6 +21,7 @@ where
 struct ProjField {
     field: syn::Field,
     marker_ident: syn::Ident,
+    pinned: bool,
 }
 
 impl ProjField {
@@ -32,6 +33,8 @@ impl ProjField {
             ident.span(),
         );
 
+        let pinned = field.attrs.iter().any(|attr| attr.path().is_ident("pin"));
+
         // strip all non-built-in attributes
         field
             .attrs
@@ -40,13 +43,21 @@ impl ProjField {
         ProjField {
             field,
             marker_ident,
+            pinned,
         }
     }
 
     pub fn marker_def(&self) -> TokenStream2 {
         let vis = &self.field.vis;
         let marker = &self.marker_ident;
-        quote!(#vis struct #marker;)
+
+        let unpin_impl = (!self.pinned)
+            .then(|| quote!(impl ::moveit2::ctor::__private::UnpinField for #marker {}));
+
+        quote! {
+            #vis struct #marker;
+            #unpin_impl
+        }
     }
 }
 
@@ -195,8 +206,10 @@ impl Context {
         let ty = &field.field.ty;
         let lt = &self.proj_lt;
 
-        let path = if init {
+        let path = if init && field.pinned {
             quote!(::moveit2::ctor::PinInit)
+        } else if init {
+            quote!(::moveit2::ctor::Init)
         } else {
             quote!(::moveit2::ctor::Uninit)
         };
@@ -366,7 +379,7 @@ impl Context {
     }
 }
 
-#[proc_macro_derive(Ctor)]
+#[proc_macro_derive(Ctor, attributes(pin))]
 pub fn ctor_derive(item: TokenStream) -> TokenStream {
     let input = syn::parse_macro_input!(item as syn::DeriveInput);
 

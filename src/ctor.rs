@@ -11,7 +11,7 @@
 //! #[pin_project::pin_project]
 //! #[derive(moveit2::Ctor)]
 //! pub struct Immovable {
-//!     #[pin]
+//!     #[pin] // implies that this field is structurally pinned.
 //!     foo: PinnedData,
 //!     bar: String
 //! }
@@ -80,7 +80,9 @@
 //! the `Ctor` derive macro generates two field projections that are part of the
 //! [`Ctor`] trait:
 //! - [`Self::Fields<'a>`], a projection to [`Uninit`] pointers;
-//! - [`Self::Proof<'a>`], a projection to [`PinInit`] pointers.
+//! - [`Self::Proof<'a>`], a projection to [`Init`] and/or [`PinInit`] pointers
+//!   (depending on whether the fields are [structurally pinned], which is
+//!   controlled by the `#[pin]` attribute).
 //!
 //! These are the input and output types of the `ctor` function, respectively.
 //! The only way to construct a `Proof` value is by calling initializer methods
@@ -99,12 +101,16 @@
 //! `Uninit`s are exposed to the closure passed to the `ctor` function via
 //! the input argument.
 //!
-//! ### The [`PinInit`] type
+//! ### The [`Init`] and [`PinInit`] types
 //!
-//! `PinInit` is similar to a [`Pin<MoveRef<T>>`](crate::MoveRef), but tagged
+//! `Init` is similar to a [`MoveRef<T>`](crate::MoveRef), but tagged
 //! with a marker type that uniquely identifies the field it points to. It is
 //! called a *proof of initialization* because the only way to construct it is
-//! by successfully emplacing into its corresponding [`Uninit`].
+//! by successfully moving/emplacing into its corresponding [`Uninit`].
+//!
+//! `PinInit` is simply an alias for a [pinned](Pin) `Init`. An `Init` can be
+//! trivially promoted to it via [`Init::into_pin`], but the reverse is not
+//! true.
 //!
 //! ## Motivation
 //!
@@ -184,6 +190,7 @@
 //! [`Self::Fields<'a>`]: Ctor::Fields
 //! [`Self::Proof<'a>`]: Ctor::Proof
 //! [autoderef specialization]: https://lukaskalbertodt.github.io/2019/12/05/generalized-autoref-based-specialization.html
+//! [structurally pinned]: core::pin#projections-and-structural-pinning
 
 use core::{
     marker::PhantomData,
@@ -210,6 +217,8 @@ pub use moveit2_proc_macros::Ctor;
 ///
 /// #[derive(Ctor)]
 /// pub struct SelfRef<T> {
+///     // signifies that the field is structurally pinned and can thus be emplaced.
+///     #[pin]
 ///     value: T,
 ///     value_ptr: *const T,
 /// }
@@ -242,7 +251,8 @@ pub trait Ctor: Sized {
     where
         Self: 'a;
 
-    /// A projection of the fields of `Self` as [`PinInit`] references.
+    /// A projection of the fields of `Self` as [`Init`] or [`PinInit`] (when
+    /// structurally pinned) references.
     ///
     /// This is called a "proof" as constructing this type requires initializing
     /// every field exposed through [`Ctor::Fields`], thus proving that
@@ -331,20 +341,42 @@ impl<'a, T, F> Uninit<'a, T, F> {
     ///
     /// [`as_ptr`]: Self::as_ptr
     /// [`as_non_null`]: Self::as_non_null
-    pub unsafe fn assume_init(self) -> PinInit<'a, T, F> {
+    pub unsafe fn assume_init(self) -> Init<'a, T, F> {
         self.drop_flag.inc();
         // SAFETY:
         // - slot is initialized
-        // - `Init` can be pinned as drop flag will prevent data from being
-        // forgotten after pinning (promise of new_unchecked)
-        unsafe { Pin::new_unchecked(Init(self)) }
+        Init(self)
+    }
+
+    /// Unsafely assume that this field has been initialized, and return a
+    /// pinned pointer to it.
+    ///
+    /// # Safety
+    ///
+    /// A valid, initialized `T` must have been written to the pointer
+    /// returned by [`as_ptr`] or [`as_non_null`].
+    ///
+    /// [`as_ptr`]: Self::as_ptr
+    /// [`as_non_null`]: Self::as_non_null
+    pub unsafe fn assume_init_pin(self) -> PinInit<'a, T, F> {
+        // SAFETY:
+        // - slot is initialized
+        Init::into_pin(unsafe { self.assume_init() })
     }
 
     /// Initialize this slot by moving a value into it.
     #[inline]
-    pub fn put(self, value: T) -> PinInit<'a, T, F> {
+    pub fn put(self, value: T) -> Init<'a, T, F> {
         self.slot.write(value);
         unsafe { self.assume_init() }
+    }
+
+    /// Initialize this slot by moving a value into it, then pinning it.
+    ///
+    /// This is a shorthand for `Init::into_pin(self.put(value))`.
+    #[inline]
+    pub fn pin(self, value: T) -> PinInit<'a, T, F> {
+        Init::into_pin(self.put(value))
     }
 
     /// Initialize this slot by constructing a value inside of it.
@@ -368,7 +400,7 @@ impl<'a, T, F> Uninit<'a, T, F> {
         unsafe {
             let pinned_slot = Pin::new_unchecked(&mut *self.slot);
             new.try_new(pinned_slot)?;
-            Ok(self.assume_init())
+            Ok(self.assume_init_pin())
         }
     }
 }
@@ -376,13 +408,22 @@ impl<'a, T, F> Uninit<'a, T, F> {
 /// Like a [`MoveRef`], but references an initialized field of a struct
 /// represented by some marker type `F`.
 ///
-/// When [pinned], this type acts as proof that the field was initialized; with
-/// the other fields of the struct it can be used to construct a [`Ctor::Proof`]
+/// This type acts as proof that the field was initialized; with the other
+/// fields of the struct it can be used to construct a [`Ctor::Proof`]
 /// to finalize in-place construction of the struct.
 ///
 /// [`MoveRef`]: crate::MoveRef
-/// [pinned]: PinInit
 pub struct Init<'a, T, F>(Uninit<'a, T, F>);
+
+impl<T, F> Init<'_, T, F> {
+    /// Pin the target of this pointer.
+    ///
+    /// This is safe as soundly creating an [`Uninit`] reference requires that
+    /// the memory may be able to be treated as pinned.
+    pub fn into_pin(this: Self) -> Pin<Self> {
+        unsafe { Pin::new_unchecked(this) }
+    }
+}
 
 /// Type alias for a pinned [`Init`].
 pub type PinInit<'a, T, F> = Pin<Init<'a, T, F>>;
@@ -450,6 +491,7 @@ hidden_macro_internals!(
     ///
     /// #[derive(Ctor)]
     /// struct Data<T> {
+    ///     #[pin]
     ///     foo: T,
     ///     bar: usize,
     ///     baz: String,
@@ -484,6 +526,7 @@ hidden_macro_internals!(
     ///
     /// #[derive(Ctor)]
     /// pub struct SelfRef<T> {
+    ///     #[pin]
     ///     val: T,
     ///     val_ptr: *mut T,
     /// };
@@ -498,11 +541,11 @@ hidden_macro_internals!(
     /// }
     /// ```
     ///
-    /// Note that since all initialized fields are pinned, the regular `Pin`
-    /// dereference rules apply. We have access to a mutable borrow above
-    /// because of the `T: Unpin` bound, but without it would only be able to
-    /// borrow immutably and would have to write `(&raw const *val).cast_mut()`
-    /// instead.
+    /// Note that since for initialized structurally pinned fields, the regular
+    /// `Pin` dereference rules apply. We have access to a mutable borrow
+    /// above because of the `T: Unpin` bound, but without it would only be
+    /// able to borrow immutably and would have to write `(&raw const
+    /// *val).cast_mut()` instead.
     ///
     /// ### Including pre-initialization logic
     ///
@@ -517,6 +560,7 @@ hidden_macro_internals!(
     /// # struct Data<T> {
     /// #     foo: T,
     /// #     bar: usize,
+    /// #     #[pin]
     /// #     baz: String,
     /// # };
     /// #
@@ -566,6 +610,7 @@ hidden_macro_internals!(
     ///
     /// #[derive(Ctor)]
     /// pub struct SelfRef<T> {
+    ///     #[pin]
     ///     val: T,
     ///     val_ptr: *mut T,
     /// };
@@ -636,6 +681,7 @@ hidden_macro_internals!(
 
                 use $crate::ctor::__private::{
                     ViaEmplace as _,
+                    ViaPin as _,
                     ViaPut as _,
                     ViaNever as _,
                 };
@@ -659,14 +705,14 @@ hidden_macro_internals!(
 
         (@assign_field[$fields:ident]($(#[$attrs:meta])* $field:ident)) => {
             $(#[$attrs])*
-            let mut $field = (&&&$crate::ctor::__private::CtorSpec::new(&$fields.$field, &$field))
+            let mut $field = (&&&&$crate::ctor::__private::CtorSpec::new(&$fields.$field, &$field))
                 .init($fields.$field, $field);
         };
 
         (@assign_field[$fields:ident]($(#[$attrs:meta])* $field:ident: $expr:expr)) => {
             $(#[$attrs])*
             let mut $field = match $expr {
-                __expr => (&&&$crate::ctor::__private::CtorSpec::new(&$fields.$field, &__expr))
+                __expr => (&&&&$crate::ctor::__private::CtorSpec::new(&$fields.$field, &__expr))
                     .init($fields.$field, __expr)
             };
         };
@@ -707,7 +753,9 @@ hidden_macro_internals!(
     ///
     /// #[derive(Ctor)]
     /// struct Data<T> {
+    ///     #[pin]
     ///     foo: T,
+    ///     #[pin]
     ///     bar: usize,
     ///     baz: String,
     /// };
@@ -788,6 +836,7 @@ hidden_macro_internals!(
                 use $crate::ctor::__private::{
                     TryViaTryEmplace as _,
                     TryViaEmplace as _,
+                    TryViaPin as _,
                     TryViaPut as _,
                     TryViaNever as _,
                 };
@@ -812,7 +861,9 @@ hidden_macro_internals!(
         (@assign_field[$err:ty, $fields:ident]($(#[$attrs:meta])* $field:ident)) => {
             $(#[$attrs])*
             let mut $field = (
-                &&&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new(&$fields.$field, &$field)
+                &&&&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err, _>::new(
+                    &$fields.$field, &$field, $crate::ctor::__private::returns_never
+                )
             ).try_init($fields.$field, $field)?;
         };
 
@@ -820,7 +871,9 @@ hidden_macro_internals!(
             $(#[$attrs])*
             let mut $field = match $expr {
                 __expr => (
-                    &&&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err>::new(&$fields.$field, &__expr)
+                    &&&&&$crate::ctor::__private::TryCtorSpec::<_, _, _, $err, _>::new(
+                        &$fields.$field, &__expr, $crate::ctor::__private::returns_never
+                    )
                 ).try_init($fields.$field, __expr)?
             };
         };
@@ -837,8 +890,10 @@ pub mod __private {
     pub use core::mem::forget;
     pub use core::pin::Pin;
 
-    use crate::ctor::{PinInit, Uninit};
+    use crate::ctor::{Init, PinInit, Uninit};
     use crate::{New, TryNew};
+
+    pub trait UnpinField {}
 
     // The types below are used for autoref specialization in `ctor` and `try_ctor`
     // macros. This allows picking out the right impl for the user-provided type
@@ -858,16 +913,26 @@ pub mod __private {
     }
 
     pub trait ViaNever<T, F, U> {
-        fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> PinInit<'a, T, F>;
+        fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> !;
     }
 
-    impl<T, F, U> ViaNever<T, F, U> for &&CtorSpec<T, F, U>
+    impl<T, F, U> ViaNever<T, F, U> for &&&CtorSpec<T, F, U>
     where
         U: Into<Infallible>,
     {
-        fn init<'a>(&self, _uninit: Uninit<'a, T, F>, src: U) -> PinInit<'a, T, F> {
+        fn init<'a>(&self, _uninit: Uninit<'a, T, F>, src: U) -> ! {
             #[allow(unreachable_code)]
             match src.into() {}
+        }
+    }
+
+    pub trait ViaPut<T, F> {
+        fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: T) -> Init<'a, T, F>;
+    }
+
+    impl<T, F: UnpinField> ViaPut<T, F> for &&CtorSpec<T, F, T> {
+        fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: T) -> Init<'a, T, F> {
+            uninit.put(src)
         }
     }
 
@@ -884,44 +949,72 @@ pub mod __private {
         }
     }
 
-    pub trait ViaPut<T, F> {
+    pub trait ViaPin<T, F> {
         fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: T) -> PinInit<'a, T, F>;
     }
 
-    impl<T, F> ViaPut<T, F> for CtorSpec<T, F, T> {
+    impl<T, F> ViaPin<T, F> for CtorSpec<T, F, T> {
         fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: T) -> PinInit<'a, T, F> {
-            uninit.put(src)
+            uninit.pin(src)
         }
     }
 
-    #[allow(clippy::type_complexity)]
-    pub struct TryCtorSpec<T, F, U, E>(PhantomData<fn() -> (T, F, U, E)>);
+    // For TryCtorSpec never type coercion to work, we need TryViaNever to return a
+    // `Result<!, E>`.
+    //
+    // To achieve this on stable, we make TryCtorSpec generic over an extra argument
+    // N that we set to this function in the macro. We can then use a trait to
+    // refer to its return type by type parameter and construct a result with
+    // it.
+    pub fn returns_never() -> ! {
+        panic!()
+    }
 
-    impl<T, F, U, E> TryCtorSpec<T, F, U, E> {
+    #[allow(clippy::type_complexity)]
+    pub struct TryCtorSpec<T, F, U, E, N>(PhantomData<fn() -> (T, F, U, E, N)>);
+
+    impl<T, F, U, E, N> TryCtorSpec<T, F, U, E, N> {
         #[inline]
-        pub fn new<'a>(_uninit: &Uninit<'a, T, F>, _src: &U) -> Self {
+        pub fn new<'a>(_uninit: &Uninit<'a, T, F>, _src: &U, _never: N) -> Self {
             Self(PhantomData)
         }
     }
 
-    pub trait TryViaNever<T, F, U, E> {
-        fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> Result<PinInit<'a, T, F>, E>;
+    pub trait HasReturn {
+        type Ret;
     }
 
-    impl<T, F, U, E> TryViaNever<T, F, U, E> for &&&TryCtorSpec<T, F, U, E>
+    impl<F: Fn() -> R, R> HasReturn for F {
+        type Ret = R;
+    }
+
+    pub trait TryViaNever<T, F, U, E, N: HasReturn> {
+        fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> Result<N::Ret, E>;
+    }
+
+    impl<T, F, U, E, N: HasReturn> TryViaNever<T, F, U, E, N> for &&&&TryCtorSpec<T, F, U, E, N>
     where
         U: Into<Infallible>,
     {
-        fn try_init<'a>(&self, _uninit: Uninit<'a, T, F>, src: U) -> Result<PinInit<'a, T, F>, E> {
+        fn try_init<'a>(&self, _uninit: Uninit<'a, T, F>, src: U) -> Result<N::Ret, E> {
             #[allow(unreachable_code)]
             match src.into() {}
+        }
+    }
+
+    pub trait TryViaPut<T, F, E> {
+        fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: T) -> Result<Init<'a, T, F>, E>;
+    }
+    impl<T, F: UnpinField, E, N> TryViaPut<T, F, E> for &&&TryCtorSpec<T, F, T, E, N> {
+        fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: T) -> Result<Init<'a, T, F>, E> {
+            Ok(uninit.put(src))
         }
     }
 
     pub trait TryViaEmplace<T, F, U, E> {
         fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> Result<PinInit<'a, T, F>, E>;
     }
-    impl<T, F, U, E> TryViaEmplace<T, F, U, E> for &&TryCtorSpec<T, F, U, E>
+    impl<T, F, U, E, N> TryViaEmplace<T, F, U, E> for &&TryCtorSpec<T, F, U, E, N>
     where
         U: New<Output = T>,
     {
@@ -933,7 +1026,7 @@ pub mod __private {
     pub trait TryViaTryEmplace<T, F, U, E> {
         fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> Result<PinInit<'a, T, F>, E>;
     }
-    impl<T, F, U, E> TryViaTryEmplace<T, F, U, E> for &TryCtorSpec<T, F, U, E>
+    impl<T, F, U, E, N> TryViaTryEmplace<T, F, U, E> for &TryCtorSpec<T, F, U, E, N>
     where
         U: TryNew<Output = T, Error: Into<E>>,
     {
@@ -942,12 +1035,12 @@ pub mod __private {
         }
     }
 
-    pub trait TryViaPut<T, F, E> {
+    pub trait TryViaPin<T, F, E> {
         fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: T) -> Result<PinInit<'a, T, F>, E>;
     }
-    impl<T, F, E> TryViaPut<T, F, E> for TryCtorSpec<T, F, T, E> {
+    impl<T, F, E, N> TryViaPin<T, F, E> for TryCtorSpec<T, F, T, E, N> {
         fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: T) -> Result<PinInit<'a, T, F>, E> {
-            Ok(uninit.put(src))
+            Ok(uninit.pin(src))
         }
     }
 }
