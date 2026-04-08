@@ -304,7 +304,7 @@ pub mod __macro {
         // Workaround for `unsafe {}` unhygine wrt to lints.
         //
         // This function is still `unsafe`.
-        pub fn new_unchecked_hygine_hack(&mut self) -> DroppingSlot<'_, T> {
+        pub fn new_unchecked_hygiene_hack(&mut self) -> DroppingSlot<'_, T> {
             unsafe { DroppingSlot::new_unchecked(&mut self.val, self.drop_flag.flag()) }
         }
     }
@@ -320,7 +320,7 @@ pub mod __macro {
     // Workaround for `unsafe {}` unhygine wrt to lints.
     //
     // This function is still `unsafe`.
-    pub fn new_unchecked_hygine_hack<'frame, T>(
+    pub fn new_unchecked_hygiene_hack<'frame, T>(
         ptr: &'frame mut MaybeUninit<T>,
         drop_flag: DropFlag<'frame>,
     ) -> Slot<'frame, T> {
@@ -363,19 +363,19 @@ pub mod __macro {
 #[macro_export]
 macro_rules! slot {
     () => {
-        $crate::slot::__macro::new_unchecked_hygine_hack(
+        $crate::slot::__macro::new_unchecked_hygiene_hack(
             &mut $crate::slot::__macro::core::mem::MaybeUninit::uninit(),
             $crate::drop_flag::TrappedFlag::new().flag(),
         )
     };
     (#[dropping]) => {
-        $crate::slot::__macro::SlotDropper::new().new_unchecked_hygine_hack()
+        $crate::slot::__macro::SlotDropper::new().new_unchecked_hygiene_hack()
     };
     ($($name:ident $(: $ty:ty)?),* $(,)*) => {$(
         let mut uninit = $crate::slot::__macro::core::mem::MaybeUninit::<
             $crate::slot!(@tyof $($ty)?)
         >::uninit();let trap = $crate::drop_flag::TrappedFlag::new();
-        let $name = $crate::slot::__macro::new_unchecked_hygine_hack(
+        let $name = $crate::slot::__macro::new_unchecked_hygiene_hack(
             &mut uninit,
             trap.flag()
         );
@@ -385,7 +385,7 @@ macro_rules! slot {
             $crate::slot!(@tyof $($ty)?)
         >::new();
         #[allow(unsafe_code, unused_unsafe)]
-        let $name = uninit.new_unchecked_hygine_hack();
+        let $name = uninit.new_unchecked_hygiene_hack();
     )*};
     (@tyof) => {_};
     (@tyof $ty:ty) => {$ty};
