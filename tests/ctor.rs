@@ -63,7 +63,7 @@ fn basic_construction() {
 }
 
 #[test]
-#[allow(unreachable_code)]
+#[allow(unreachable_code, clippy::diverging_sub_expression)]
 fn never_type_inference() {
     let _ = ctor!(SelfRef::<usize> {
         val: panic!(),
@@ -289,7 +289,7 @@ fn init_fields_drop_on_panic() {
 
     let _assert = AssertDropped(&dropped);
 
-    #[allow(unreachable_code)]
+    #[allow(unreachable_code, clippy::diverging_sub_expression)]
     let panics = ctor!(SelfRef::<_> {
         val: SetDropped(&dropped),
         val_ptr: panic!("intentional unwind")
