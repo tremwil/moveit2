@@ -57,6 +57,9 @@ jobs:
       - run: cargo miri test --all-features
 
   release:
+    permissions:
+      contents: write
+
     name: release${{ case(github.event_name == 'push', '', ' dry-run') }}
     runs-on: ubuntu-latest
     needs:
