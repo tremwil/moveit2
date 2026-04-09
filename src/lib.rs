@@ -22,13 +22,13 @@
 //! `moveit2` revolves around `unsafe trait`s that impose additional guarantees
 //! on `!Unpin` types, such that they can be moved in the C++ sense. There are
 //! two senses of "move" frequently used:
-//! - The Rust sense, which is a blind memcpy and analogous-ish to the
-//!   C++ "std::is_trivially_moveable` type-trait. Rust moves also render the
+//! - The Rust sense, which is a blind memcpy and analogous-ish to the C++
+//!   `std::is_trivially_moveable` type-trait. Rust moves also render the
 //!   moved-from object inaccessible.
 //! - The C++ sense, where a move is really like a mutating `Clone` operation,
 //!   which leave the moved-from value accessible to be destroyed at the end of
 //!   the scope.
-//!   
+//!
 //! C++ also has *constructors*, which are special functions that produce a new
 //! value in a particular location. In particular, C++ constructors may assume
 //! that the address of `*this` will not change; all C++ objects are effectively
@@ -71,7 +71,7 @@
 //! use std::ptr::NonNull;
 //!
 //! use moveit2::new;
-//! use moveit2::new::New;
+//! use moveit2::new::{New, TryNew};
 //! use moveit2::moveit;
 //!
 //! // This is a self-referential struct because the slice field points to the
@@ -127,6 +127,15 @@
 //! should return `impl New` instead. This is analogous to have `async fn`s and
 //! `.iter()` functions work.
 //!
+//! ## In-place Struct Construction
+//!
+//! Outside of `new::` helpers, when the `ctor` feature is enabled this crate
+//! also provides a [`mod@ctor`] module for creating struct constructors that
+//! can in-place initialize fields, all without `unsafe` code. This is primarily
+//! done through the [`Ctor`] derive macro and [`macro@ctor`] and [`try_ctor`]
+//! declarative macros. See [the `ctor` module documentation](mod@ctor) for more
+//! information.
+//!
 //! # Emplacement
 //!
 //! The example above makes use of the [`moveit!()`] macro, one of many ways to
@@ -159,6 +168,9 @@ mod alloc_support;
 #[cfg(feature = "cxx")]
 mod cxx_support;
 
+#[cfg(feature = "ctor")]
+pub mod ctor;
+
 pub mod drop_flag;
 pub mod move_ref;
 pub mod new;
@@ -171,6 +183,10 @@ pub use crate::{
     slot::Slot,
 };
 
+#[cfg(feature = "ctor")]
+#[doc(inline)]
+pub use ctor::{Ctor, InitProof};
+
 #[cfg(feature = "cxx")]
 pub use cxx_support::MakeCppStorage;
 
@@ -178,9 +194,10 @@ pub use cxx_support::MakeCppStorage;
 mod miri_util {
     /// Check if miri is checking aliasing rules with stack borrows.
     ///
-    /// Some tests that manually deallocate Box memory to avoid miri reporting leaks
-    /// do not pass Stacked Borrows due to strict rules around around raw pointer tag
-    /// invalidations, despite being sound under Tree Borrows.
+    /// Some tests that manually deallocate Box memory to avoid miri reporting
+    /// leaks do not pass Stacked Borrows due to strict rules around around
+    /// raw pointer tag invalidations, despite being sound under Tree
+    /// Borrows.
     #[allow(clippy::needless_return)]
     pub(crate) fn stacked_borrows_enabled() -> bool {
         #[cfg(not(miri))]

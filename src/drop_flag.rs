@@ -161,8 +161,8 @@ impl<T> DroppingFlag<T> {
         }
     }
 
-    /// Splits this slot into a reference to the wrapped value plus a reference to
-    /// the drop flag.
+    /// Splits this slot into a reference to the wrapped value plus a reference
+    /// to the drop flag.
     ///
     /// This function is safe; the returned reference to the drop flag cannot be
     /// used to make a previously dropped value live again, since the value is
@@ -176,8 +176,8 @@ impl<T> DroppingFlag<T> {
         )
     }
 
-    /// Splits this slot into a reference to the wrapped value plus a reference to
-    /// the drop flag.
+    /// Splits this slot into a reference to the wrapped value plus a reference
+    /// to the drop flag.
     ///
     /// This function is safe; the returned reference to the drop flag cannot be
     /// used to make a previously dropped value live again, since the value is
@@ -274,7 +274,7 @@ impl TrappedFlag {
             fn drop(&mut self) {
                 // In tests, we don't double-panic so that we can observe the
                 // failure correctly.
-                if cfg!(not(test)) {
+                if cfg!(not(any(test, moveit2_no_drop_flag_abort))) {
                     panic!()
                 }
             }

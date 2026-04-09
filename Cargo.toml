@@ -12,28 +12,53 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+[workspace]
+resolver = "3"
+members = ["moveit2-proc-macros", "tests/cxx"]
+
+[workspace.package]
+repository = "https://github.com/tremwil/moveit2"
+edition = "2024"
+license = "Apache-2.0 OR MIT"
+
 [package]
 name = "moveit2"
-version = "0.6.0"
 authors = ["Miguel Young de la Sota <mcyoung@google.com>"]
-edition = "2024"
-repository = "https://github.com/tremwil/moveit2"
 keywords = ["ffi", "no_std", "macros", "lifetime", "ownership"]
 readme = "README.crates-io.md"
-license = "Apache-2.0 OR MIT"
 description = "A library for safe, in-place construction of Rust (and C++!) objects."
 exclude = [".github/*", ".cargo/*"]
+version = "0.6.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[test]]
+name = "ctor"
+required-features = ["alloc", "ctor"]
 
 [features]
 alloc = []
-default = ["alloc"]
+ctor = ["dep:moveit2-proc-macros"]
+default = ["alloc", "ctor"]
 
 [dependencies.cxx]
 version = "1.0.194"
 optional = true
 
-[workspace]
-members = ["cxx-tests"]
+[dependencies.moveit2-proc-macros]
+version = "0.1.0"
+optional = true
+path = "moveit2-proc-macros"
+
+[dev-dependencies]
+pin-project = "1.1.11"
+
+[lints.rust.unexpected_cfgs]
+level = "warn"
+# This cfg allows testing trap flag aborts in integration tests.
+# It should NEVER be used in other scenarios, as it is UNSOUND!
+check-cfg = ['cfg(moveit2_no_drop_flag_abort)']
 
 [package.metadata.docs.rs]
 all-features = true
