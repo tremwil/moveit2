@@ -57,6 +57,11 @@ jobs:
       - run: cargo miri test --all-features
 
   release:
+    permissions:
+      contents: write
+    env:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CRATES_IO_TOKEN }}
+
     name: release${{ case(github.event_name == 'push', '', ' dry-run') }}
     runs-on: ubuntu-latest
     needs:
@@ -76,13 +81,14 @@ jobs:
       - name: Publish packages
         id: publish
         if: github.event_name == 'push'
-        run: .github/workflows/release.sh --token ${{ secrets.CRATES_IO_TOKEN }}
+        run: .github/workflows/release.sh
 
       - name: Create GitHub release
         if: github.event_name == 'push' && steps.publish.outputs.need-publish == 'true'
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
         with:
           tag_name: v${{ steps.publish.outputs.moveit2 }}
+          generate_release_notes: true
 
   all-checks-pass:
     name: Verify that all checks passed
