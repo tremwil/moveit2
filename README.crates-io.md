@@ -9,9 +9,9 @@ with some additional features.
 
 *Please read this if migrating from `moveit`!*
 
-The MSRV of `moveit` is Rust 1.68. The MSRV policy for this fork is the most recent
-stable Rust version (in other words, there is no MSRV policy). The MSRV may be
-bumped as part of minor releases; it is not part of semver.
+The MSRV of the original `moveit` is Rust 1.68. The MSRV policy for this fork is 
+the most recent stable Rust version (in other words, there is no MSRV policy). The 
+MSRV may be bumped as part of minor releases; it is not part of semver.
 
 ## How It Works
 
