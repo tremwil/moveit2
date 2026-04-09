@@ -134,6 +134,15 @@ a constructor:
 For example, we could have placed the above in a `Box` by writing
 `Box::emplace(Unmovable::new())`.
 
+## In-place Struct Construction
+
+Outside of `new::` helpers, when the `ctor` feature is enabled this crate
+also provides a [`mod@ctor`] module for creating struct constructors that
+can in-place initialize fields, all without `unsafe` code. This is primarily
+done through the [`Ctor`] derive macro and [`macro@ctor`] and [`try_ctor`]
+declarative macros. See [the `ctor` module documentation](mod@ctor) for more
+information.
+
 [`Pin` documentation]: https://doc.rust-lang.org/std/pin/index.html#drop-guarantee
 
 License: Apache-2.0

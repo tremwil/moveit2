@@ -131,7 +131,7 @@
 //!
 //! Outside of `new::` helpers, when the `ctor` feature is enabled this crate
 //! also provides a [`mod@ctor`] module for creating struct constructors that
-//! can in-place initialize fields, all without `unsafe` code. This is primarly
+//! can in-place initialize fields, all without `unsafe` code. This is primarily
 //! done through the [`Ctor`] derive macro and [`macro@ctor`] and [`try_ctor`]
 //! declarative macros. See [the `ctor` module documentation](mod@ctor) for more
 //! information.
