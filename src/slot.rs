@@ -117,7 +117,7 @@ impl<'frame, T> Slot<'frame, T> {
     }
 
     /// Emplace `new` into this slot, returning a new, pinned [`MoveRef`].
-    pub fn emplace<N: New<Output = T>>(self, new: N) -> Pin<MoveRef<'frame, T>> {
+    pub fn emplace<N: New<T>>(self, new: N) -> Pin<MoveRef<'frame, T>> {
         match self.try_emplace(new) {
             Ok(x) => x,
             Err(e) => match e {},
@@ -126,10 +126,7 @@ impl<'frame, T> Slot<'frame, T> {
 
     /// Try to emplace `new` into this slot, returning a new, pinned
     /// [`MoveRef`].
-    pub fn try_emplace<N: TryNew<Output = T>>(
-        self,
-        new: N,
-    ) -> Result<Pin<MoveRef<'frame, T>>, N::Error> {
+    pub fn try_emplace<N: TryNew<T>>(self, new: N) -> Result<Pin<MoveRef<'frame, T>>, N::Error> {
         unsafe {
             new.try_new(Pin::new_unchecked(self.ptr))?;
             self.drop_flag.inc();
@@ -248,10 +245,7 @@ impl<'frame, T> DroppingSlot<'frame, T> {
     /// This function pins the memory this slot wraps, but does not guarantee
     /// its destructor is run; that is the caller's responsibility, by
     /// decrementing the given [`DropFlag`].
-    pub unsafe fn emplace<N: New<Output = T>>(
-        self,
-        new: N,
-    ) -> (Pin<&'frame mut T>, DropFlag<'frame>) {
+    pub unsafe fn emplace<N: New<T>>(self, new: N) -> (Pin<&'frame mut T>, DropFlag<'frame>) {
         match unsafe { self.try_emplace(new) } {
             Ok((x, d)) => (x, d),
             Err(e) => match e {},
@@ -265,7 +259,7 @@ impl<'frame, T> DroppingSlot<'frame, T> {
     /// This function pins the memory this slot wraps, but does not guarantee
     /// its destructor is run; that is the caller's responsibility, by
     /// decrementing the given [`DropFlag`].
-    pub unsafe fn try_emplace<N: TryNew<Output = T>>(
+    pub unsafe fn try_emplace<N: TryNew<T>>(
         self,
         new: N,
     ) -> Result<(Pin<&'frame mut T>, DropFlag<'frame>), N::Error> {

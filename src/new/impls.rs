@@ -25,7 +25,7 @@ macro_rules! trivial_move {
         impl<$($($targs)*)?> SafeMoveNew for $ty {
             fn move_new(
                 src: Pin<MoveRef<Self>>,
-            ) -> impl New<Output = Self> {
+            ) -> impl New<Self> {
                 unsafe {
                     new::by_raw(move |this| {
                         let src = Pin::into_inner_unchecked(src);
@@ -53,7 +53,7 @@ macro_rules! trivial_copy {
         impl<$($($targs)*)?> SafeMoveNew for $ty {
             fn move_new(
                 src: Pin<MoveRef<Self>>,
-            ) -> impl New<Output = Self> {
+            ) -> impl New<Self> {
                 unsafe {
                     new::by_raw(move |this| {
                         let src = Pin::into_inner_unchecked(src);
@@ -75,7 +75,7 @@ macro_rules! trivial_copy {
         }
 
         impl<$($($targs)*)?> CopyNew for $ty where Self: Clone {
-            fn copy_new(&self) -> impl New<Output = Self> {
+            fn copy_new(&self) -> impl New<Self> {
                 new::by(move || self.clone())
             }
         }

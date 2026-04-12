@@ -36,7 +36,7 @@
 //! use moveit2::{New, InitProof};
 //!
 //! impl Immovable {
-//!     pub fn new(foo: impl New<Output = PinnedData>, bar: String) -> impl New<Output = Self> {
+//!     pub fn new(foo: impl New<PinnedData>, bar: String) -> impl New<Self> {
 //!         Self::ctor(|fields| InitProof::<Self> {
 //!             foo: fields.foo.emplace(foo),
 //!             bar: fields.bar.put(bar)
@@ -59,7 +59,7 @@
 //! #     bar: String
 //! # }
 //! impl Immovable {
-//!     pub fn new(foo: impl New<Output = PinnedData>, bar: String) -> impl New<Output = Self> {
+//!     pub fn new(foo: impl New<PinnedData>, bar: String) -> impl New<Self> {
 //!         moveit2::ctor!(Self { foo, bar })
 //!     }
 //! }
@@ -141,7 +141,7 @@
 //! }
 //!
 //! impl Immovable {
-//!     pub fn new(foo: impl New<Output = PinnedData>, bar: String) -> impl New<Output = Self> {
+//!     pub fn new(foo: impl New<PinnedData>, bar: String) -> impl New<Self> {
 //!         unsafe {
 //!             // note: `this` is a Pin<&mut MaybeUninit<Self>>
 //!             new::by_raw::<Self, _>(|this| {
@@ -381,7 +381,7 @@ impl<'a, T, F> Uninit<'a, T, F> {
 
     /// Initialize this slot by constructing a value inside of it.
     #[inline]
-    pub fn emplace(self, new: impl New<Output = T>) -> PinInit<'a, T, F> {
+    pub fn emplace(self, new: impl New<T>) -> PinInit<'a, T, F> {
         self.try_emplace(new).unwrap_or_else(|e| match e {})
     }
 
@@ -389,7 +389,7 @@ impl<'a, T, F> Uninit<'a, T, F> {
     #[inline]
     pub fn try_emplace<N>(self, new: N) -> Result<PinInit<'a, T, F>, N::Error>
     where
-        N: TryNew<Output = T>,
+        N: TryNew<T>,
     {
         // SAFETY:
         // - pinning &'a mut MaybeUninit is fine, as it has a trivial drop
@@ -532,7 +532,7 @@ hidden_macro_internals!(
     /// };
     ///
     /// impl<T: Unpin> SelfRef<T> {
-    ///     pub fn new(val: impl New<Output = T>) -> impl New<Output = Self> {
+    ///     pub fn new(val: impl New<T>) -> impl New<Self> {
     ///         ctor!(Self {
     ///             val,
     ///             val_ptr: &raw mut *val,
@@ -616,7 +616,7 @@ hidden_macro_internals!(
     /// };
     ///
     /// impl<T> SelfRef<T> {
-    ///     pub fn new(val: impl New<Output = T>) -> impl New<Output = Self> {
+    ///     pub fn new(val: impl New<T>) -> impl New<Self> {
     ///         ctor!(|fields| Self {
     ///             val_ptr: fields.val.as_ptr(),
     ///             val,
@@ -942,7 +942,7 @@ pub mod __private {
 
     impl<T, F, U> ViaEmplace<T, F, U> for &CtorSpec<T, F, U>
     where
-        U: New<Output = T>,
+        U: New<T>,
     {
         fn init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> PinInit<'a, T, F> {
             uninit.emplace(src)
@@ -1016,7 +1016,7 @@ pub mod __private {
     }
     impl<T, F, U, E, N> TryViaEmplace<T, F, U, E> for &&TryCtorSpec<T, F, U, E, N>
     where
-        U: New<Output = T>,
+        U: New<T>,
     {
         fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> Result<PinInit<'a, T, F>, E> {
             Ok(uninit.emplace(src))
@@ -1028,7 +1028,7 @@ pub mod __private {
     }
     impl<T, F, U, E, N> TryViaTryEmplace<T, F, U, E> for &TryCtorSpec<T, F, U, E, N>
     where
-        U: TryNew<Output = T, Error: Into<E>>,
+        U: TryNew<T, Error: Into<E>>,
     {
         fn try_init<'a>(&self, uninit: Uninit<'a, T, F>, src: U) -> Result<PinInit<'a, T, F>, E> {
             uninit.try_emplace(src).map_err(Into::into)

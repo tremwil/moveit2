@@ -307,7 +307,7 @@ impl Context {
                 /// [`Self::Proof<'a>`]: ::moveit2::ctor::Ctor::Proof
                 /// [`Uninit`]: ::moveit2::ctor::Uninit
                 /// [`Init`]: ::moveit2::ctor::Init
-                #vis fn ctor<#ctor_ty>(ctor: #ctor_ty) -> impl ::moveit2::New<Output = Self>
+                #vis fn ctor<#ctor_ty>(ctor: #ctor_ty) -> impl ::moveit2::New<Self>
                 where
                     #ctor_ty: for<#lt> FnOnce(#fields_ident<#lt, #(#s_ty_unpacked,)*>) ->
                         #proof_ident<#lt, #(#s_ty_unpacked,)*>
@@ -334,7 +334,7 @@ impl Context {
                 /// [`Uninit`]: ::moveit2::ctor::Uninit
                 /// [`Init`]: ::moveit2::ctor::Init
                 #vis fn try_ctor<#err_ty, #ctor_ty>(ctor: #ctor_ty) ->
-                    impl ::moveit2::TryNew<Output = Self, Error = #err_ty>
+                    impl ::moveit2::TryNew<Self, Error = #err_ty>
                 where
                     #ctor_ty: for<#lt> FnOnce(#fields_ident<#lt, #(#s_ty_unpacked,)*>) ->
                         Result<#proof_ident<#lt, #(#s_ty_unpacked,)*>, #err_ty>

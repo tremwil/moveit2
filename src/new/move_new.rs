@@ -45,7 +45,7 @@ pub unsafe trait MoveNew: Sized {
 /// return-position [`New`].
 pub trait SafeMoveNew: Sized {
     /// copy-construct this value, returning a [`New`] to emplace the copy.
-    fn move_new(src: Pin<MoveRef<Self>>) -> impl New<Output = Self>;
+    fn move_new(src: Pin<MoveRef<Self>>) -> impl New<Self>;
 }
 
 unsafe impl<T: SafeMoveNew> MoveNew for T {
@@ -56,7 +56,7 @@ unsafe impl<T: SafeMoveNew> MoveNew for T {
 
 /// Returns a [`New`] that move-constructs an [`Unpin`] value by trivially
 /// moving it.
-pub fn trivial_mov<P>(ptr: P) -> impl New<Output = P::Target>
+pub fn trivial_mov<P>(ptr: P) -> impl New<P::Target>
 where
     P: AsMove<Target: Sized + Unpin>,
 {
@@ -74,7 +74,7 @@ where
 /// }
 /// ```
 #[inline]
-pub fn mov<P>(ptr: P) -> impl New<Output = P::Target>
+pub fn mov<P>(ptr: P) -> impl New<P::Target>
 where
     P: AsMove<Target: MoveNew>,
 {

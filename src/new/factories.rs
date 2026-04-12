@@ -32,7 +32,7 @@ use crate::new::TryNew;
 /// `f` must respect the safety requirements of [`New`], since it is used
 /// as an implementation basis.
 #[inline]
-pub unsafe fn by_raw<T, F>(f: F) -> impl New<Output = T>
+pub unsafe fn by_raw<T, F>(f: F) -> impl New<T>
 where
     F: FnOnce(Pin<&mut MaybeUninit<T>>),
 {
@@ -41,17 +41,13 @@ where
         _ph: PhantomData<fn(T)>,
     }
 
-    unsafe impl<F, T> TryNew for FnNew<F, T>
+    unsafe impl<F, T> TryNew<T> for FnNew<F, T>
     where
         F: FnOnce(Pin<&mut MaybeUninit<T>>),
     {
-        type Output = T;
         type Error = Infallible;
 
-        unsafe fn try_new(
-            self,
-            this: Pin<&mut MaybeUninit<Self::Output>>,
-        ) -> Result<(), Self::Error> {
+        unsafe fn try_new(self, this: Pin<&mut MaybeUninit<T>>) -> Result<(), Self::Error> {
             (self.f)(this);
             Ok(())
         }
@@ -74,7 +70,7 @@ where
 /// assert_eq!(*x, 42);
 /// ```
 #[inline]
-pub fn by<T, F>(f: F) -> impl New<Output = T>
+pub fn by<T, F>(f: F) -> impl New<T>
 where
     F: FnOnce() -> T,
 {
@@ -92,7 +88,7 @@ where
 /// assert_eq!(*x, "foo");
 /// ```
 #[inline]
-pub fn from<T: From<U>, U>(val: U) -> impl New<Output = T> {
+pub fn from<T: From<U>, U>(val: U) -> impl New<T> {
     by(|| val.into())
 }
 
@@ -109,7 +105,7 @@ pub fn from<T: From<U>, U>(val: U) -> impl New<Output = T> {
 ///
 /// In general, you will almost always want [`from()`].
 #[inline]
-pub fn of<T>(val: T) -> impl New<Output = T> {
+pub fn of<T>(val: T) -> impl New<T> {
     by(|| val)
 }
 
@@ -124,7 +120,7 @@ pub fn of<T>(val: T) -> impl New<Output = T> {
 /// assert_eq!(*x, 0);
 /// ```
 #[inline]
-pub fn default<T: Default>() -> impl New<Output = T> {
+pub fn default<T: Default>() -> impl New<T> {
     by(Default::default)
 }
 
@@ -138,7 +134,7 @@ pub fn default<T: Default>() -> impl New<Output = T> {
 /// `f` must respect the safety requirements of [`TryNew`], since it is used
 /// as an implementation basis.
 #[inline]
-pub unsafe fn try_by_raw<T, E, F>(f: F) -> impl TryNew<Output = T, Error = E>
+pub unsafe fn try_by_raw<T, E, F>(f: F) -> impl TryNew<T, Error = E>
 where
     F: FnOnce(Pin<&mut MaybeUninit<T>>) -> Result<(), E>,
 {
@@ -147,14 +143,13 @@ where
         _ph: PhantomData<fn(T) -> E>,
     }
 
-    unsafe impl<F, T, E> TryNew for FnNew<F, T, E>
+    unsafe impl<F, T, E> TryNew<T> for FnNew<F, T, E>
     where
         F: FnOnce(Pin<&mut MaybeUninit<T>>) -> Result<(), E>,
     {
-        type Output = T;
         type Error = E;
         #[inline]
-        unsafe fn try_new(self, this: Pin<&mut MaybeUninit<Self::Output>>) -> Result<(), E> {
+        unsafe fn try_new(self, this: Pin<&mut MaybeUninit<T>>) -> Result<(), E> {
             (self.f)(this)
         }
     }
@@ -168,7 +163,7 @@ where
 /// Returns a [`TryNew`] that uses the provided closure for constructing a
 /// `T`.
 #[inline]
-pub fn try_by<T, E, F>(f: F) -> impl TryNew<Output = T, Error = E>
+pub fn try_by<T, E, F>(f: F) -> impl TryNew<T, Error = E>
 where
     F: FnOnce() -> Result<T, E>,
 {
@@ -182,6 +177,6 @@ where
 
 /// Returns a [`TryNew`] that uses a `TryFrom` implementation to generate a `T`.
 #[inline]
-pub fn try_from<T: TryFrom<U>, U>(val: U) -> impl TryNew<Output = T, Error = T::Error> {
+pub fn try_from<T: TryFrom<U>, U>(val: U) -> impl TryNew<T, Error = T::Error> {
     try_by(|| val.try_into())
 }
