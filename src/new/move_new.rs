@@ -41,6 +41,28 @@ pub unsafe trait MoveNew: Sized {
     unsafe fn move_new(src: Pin<MoveRef<Self>>, this: Pin<&mut MaybeUninit<Self>>);
 }
 
+/// An helper trait that generates a [`MoveNew`] implementation from a
+/// return-position [`New`].
+pub trait SafeMoveNew: Sized {
+    /// copy-construct this value, returning a [`New`] to emplace the copy.
+    fn move_new(src: Pin<MoveRef<Self>>) -> impl New<Output = Self>;
+}
+
+unsafe impl<T: SafeMoveNew> MoveNew for T {
+    unsafe fn move_new(src: Pin<MoveRef<Self>>, this: Pin<&mut MaybeUninit<Self>>) {
+        unsafe { SafeMoveNew::move_new(src).new(this) }
+    }
+}
+
+/// Returns a [`New`] that move-constructs an [`Unpin`] value by trivially
+/// moving it.
+pub fn trivial_mov<P>(ptr: P) -> impl New<Output = P::Target>
+where
+    P: AsMove<Target: Sized + Unpin>,
+{
+    new::by(move || MoveRef::into_inner(Pin::into_inner(ptr.as_move(slot!(#[dropping])))))
+}
+
 /// Returns a [`New`] that forwards to [`MoveNew`].
 ///
 /// ```
@@ -54,8 +76,7 @@ pub unsafe trait MoveNew: Sized {
 #[inline]
 pub fn mov<P>(ptr: P) -> impl New<Output = P::Target>
 where
-    P: AsMove,
-    P::Target: MoveNew,
+    P: AsMove<Target: MoveNew>,
 {
     unsafe {
         new::by_raw(move |this| {

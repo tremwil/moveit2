@@ -15,25 +15,23 @@
 //! Trivial impls for `std` types.
 
 use core::mem;
-use core::mem::MaybeUninit;
 use core::pin::Pin;
 
 use crate::move_ref::MoveRef;
-use crate::new::CopyNew;
-use crate::new::MoveNew;
-use crate::new::Swap;
+use crate::new::{self, CopyNew, New, SafeMoveNew, Swap};
 
 macro_rules! trivial_move {
     ($($ty:ty $(where [$($targs:tt)*])?),* $(,)?) => {$(
-        unsafe impl<$($($targs)*)?> MoveNew for $ty {
-            unsafe fn move_new(
+        impl<$($($targs)*)?> SafeMoveNew for $ty {
+            fn move_new(
                 src: Pin<MoveRef<Self>>,
-                this: Pin<&mut MaybeUninit<Self>>,
-            ) {
+            ) -> impl New<Output = Self> {
                 unsafe {
-                    let src = Pin::into_inner_unchecked(src);
-                    let this = Pin::into_inner_unchecked(this);
-                    this.write(MoveRef::into_inner(src));
+                    new::by_raw(move |this| {
+                        let src = Pin::into_inner_unchecked(src);
+                        let this = Pin::into_inner_unchecked(this);
+                        this.write(MoveRef::into_inner(src));
+                    })
                 }
             }
         }
@@ -52,15 +50,16 @@ macro_rules! trivial_move {
 
 macro_rules! trivial_copy {
     ($($ty:ty $(where [$($targs:tt)*])?),* $(,)?) => {$(
-        unsafe impl<$($($targs)*)?> MoveNew for $ty {
-            unsafe fn move_new(
+        impl<$($($targs)*)?> SafeMoveNew for $ty {
+            fn move_new(
                 src: Pin<MoveRef<Self>>,
-                this: Pin<&mut MaybeUninit<Self>>,
-            ) {
+            ) -> impl New<Output = Self> {
                 unsafe {
-                    let src = Pin::into_inner_unchecked(src);
-                    let this = Pin::into_inner_unchecked(this);
-                    this.write(MoveRef::into_inner(src));
+                    new::by_raw(move |this| {
+                        let src = Pin::into_inner_unchecked(src);
+                        let this = Pin::into_inner_unchecked(this);
+                        this.write(MoveRef::into_inner(src));
+                    })
                 }
             }
         }
@@ -75,13 +74,9 @@ macro_rules! trivial_copy {
             }
         }
 
-        unsafe impl<$($($targs)*)?> CopyNew for $ty where Self: Clone {
-            unsafe fn copy_new(
-                src: &Self,
-                this: Pin<&mut MaybeUninit<Self>>,
-            ) {
-                let this = unsafe { Pin::into_inner_unchecked(this) };
-                this.write(src.clone());
+        impl<$($($targs)*)?> CopyNew for $ty where Self: Clone {
+            fn copy_new(&self) -> impl New<Output = Self> {
+                new::by(move || self.clone())
             }
         }
     )*}
