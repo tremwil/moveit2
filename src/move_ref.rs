@@ -43,6 +43,10 @@
 //! best case it will leak memory, but in some cases will crash the program in
 //! order to observe safety guarantees.
 
+use core::fmt::Debug;
+use core::fmt::Display;
+use core::fmt::Pointer;
+use core::hash::Hash;
 use core::mem;
 use core::ops::Deref;
 use core::ops::DerefMut;
@@ -175,6 +179,50 @@ impl<'a, T> From<MoveRef<'a, T>> for Pin<MoveRef<'a, T>> {
     #[inline]
     fn from(x: MoveRef<'a, T>) -> Self {
         MoveRef::into_pin(x)
+    }
+}
+
+impl<T: ?Sized + Debug> Debug for MoveRef<'_, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        Debug::fmt(self.ptr, f)
+    }
+}
+
+impl<T: ?Sized + Display> Display for MoveRef<'_, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        Display::fmt(self.ptr, f)
+    }
+}
+
+impl<T: ?Sized> Pointer for MoveRef<'_, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        Pointer::fmt(&self.ptr, f)
+    }
+}
+
+impl<T: ?Sized + PartialEq> PartialEq for MoveRef<'_, T> {
+    fn eq(&self, other: &Self) -> bool {
+        (*self.ptr).eq(other.ptr)
+    }
+}
+
+impl<T: ?Sized + PartialOrd> PartialOrd for MoveRef<'_, T> {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        (*self.ptr).partial_cmp(other.ptr)
+    }
+}
+
+impl<T: ?Sized + Eq> Eq for MoveRef<'_, T> {}
+
+impl<T: ?Sized + Ord> Ord for MoveRef<'_, T> {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        (*self.ptr).cmp(other.ptr)
+    }
+}
+
+impl<T: ?Sized + Hash> Hash for MoveRef<'_, T> {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.ptr.hash(state)
     }
 }
 
