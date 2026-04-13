@@ -30,12 +30,14 @@ use {crate::new, core::ops::DerefMut};
 use alloc::{boxed::Box, rc::Rc, sync::Arc};
 
 mod copy_new;
+mod default_new;
 mod factories;
 mod move_new;
 
 mod impls;
 
 pub use copy_new::*;
+pub use default_new::*;
 pub use factories::*;
 pub use move_new::*;
 
