@@ -99,7 +99,7 @@ mod bindgenish {
     }
 
     impl Foo {
-        pub fn new() -> impl New<Output = Self> {
+        pub fn new() -> impl New<Self> {
             unsafe {
                 moveit2::new::by_raw(|space| {
                     let space = Pin::into_inner_unchecked(space).as_mut_ptr();
@@ -150,7 +150,7 @@ mod bindgenish {
     }
 
     impl Bar {
-        pub fn new() -> impl New<Output = Self> {
+        pub fn new() -> impl New<Self> {
             unsafe {
                 moveit2::new::by_raw(|space| {
                     let space = Pin::into_inner_unchecked(space).as_mut_ptr();

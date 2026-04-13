@@ -27,7 +27,18 @@ struct ProjField {
 impl ProjField {
     pub fn new(mut field: syn::Field, unsafe_idents: &HashSet<String>) -> Self {
         let ident = field.ident.as_ref().unwrap();
-        let ident_pascal = ident.to_string().to_pascal_case();
+
+        // to_pascal_case does not capitalize idents prefixed with an odd number of
+        // underscores, so manually split them out
+        let ident_string = ident.to_string();
+        let ident_string = ident_string.trim_start_matches("r#");
+        let (underscores, no_underscores) = ident_string.split_at(
+            ident_string
+                .find(|chr| chr != '_')
+                .unwrap_or(ident_string.len()),
+        );
+        let ident_pascal = format!("{underscores}{}", no_underscores.to_pascal_case());
+
         let marker_ident = syn::Ident::new(
             &Context::make_safe_name(&format!("__{ident_pascal}"), |s| unsafe_idents.contains(s)),
             ident.span(),
@@ -307,7 +318,7 @@ impl Context {
                 /// [`Self::Proof<'a>`]: ::moveit2::ctor::Ctor::Proof
                 /// [`Uninit`]: ::moveit2::ctor::Uninit
                 /// [`Init`]: ::moveit2::ctor::Init
-                #vis fn ctor<#ctor_ty>(ctor: #ctor_ty) -> impl ::moveit2::New<Output = Self>
+                #vis fn ctor<#ctor_ty>(ctor: #ctor_ty) -> impl ::moveit2::New<Self>
                 where
                     #ctor_ty: for<#lt> FnOnce(#fields_ident<#lt, #(#s_ty_unpacked,)*>) ->
                         #proof_ident<#lt, #(#s_ty_unpacked,)*>
@@ -334,7 +345,7 @@ impl Context {
                 /// [`Uninit`]: ::moveit2::ctor::Uninit
                 /// [`Init`]: ::moveit2::ctor::Init
                 #vis fn try_ctor<#err_ty, #ctor_ty>(ctor: #ctor_ty) ->
-                    impl ::moveit2::TryNew<Output = Self, Error = #err_ty>
+                    impl ::moveit2::TryNew<Self, Error = #err_ty>
                 where
                     #ctor_ty: for<#lt> FnOnce(#fields_ident<#lt, #(#s_ty_unpacked,)*>) ->
                         Result<#proof_ident<#lt, #(#s_ty_unpacked,)*>, #err_ty>

@@ -746,7 +746,7 @@ pub(crate) mod test {
     }
 
     impl Immovable {
-        pub(crate) fn new() -> impl New<Output = Self> {
+        pub(crate) fn new() -> impl New<Self> {
             new::default()
         }
     }

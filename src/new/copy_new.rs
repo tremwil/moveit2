@@ -21,11 +21,11 @@ use crate::new::New;
 pub trait CopyNew: Sized {
     /// Copy-construct `src`, returning a [`New`] that creates the same value
     /// in a different memory location.
-    fn copy_new(&self) -> impl New<Output = Self>;
+    fn copy_new(&self) -> impl New<Self>;
 }
 
 /// Returns a [`New`] that copy-constructs an [`Unpin`] value by cloning it.
-pub fn trivial_copy<P>(ptr: P) -> impl New<Output = P::Target>
+pub fn trivial_copy<P>(ptr: P) -> impl New<P::Target>
 where
     P: Deref<Target: Clone + Unpin>,
 {
@@ -34,7 +34,7 @@ where
 
 /// Returns a new `New` that uses a copy constructor.
 #[inline]
-pub fn copy<P>(ptr: P) -> impl New<Output = P::Target>
+pub fn copy<P>(ptr: P) -> impl New<P::Target>
 where
     P: Deref<Target: CopyNew>,
 {

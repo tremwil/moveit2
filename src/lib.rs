@@ -87,7 +87,7 @@
 //!
 //! impl Unmovable {
 //!     // Defer construction until the final location is known.
-//!     fn new(data: String) -> impl New<Output = Self> {
+//!     fn new(data: String) -> impl New<Self> {
 //!         new::of(Unmovable {
 //!             data,
 //!             // We only create the pointer once the data is in place

@@ -66,7 +66,7 @@ pub unsafe trait MakeCppStorage: Sized {
 impl<T: MakeCppStorage + UniquePtrTarget> Emplace<T> for UniquePtr<T> {
     type Output = Self;
 
-    fn try_emplace<N: TryNew<Output = T>>(n: N) -> Result<Self, N::Error> {
+    fn try_emplace<N: TryNew<T>>(n: N) -> Result<Self, N::Error> {
         unsafe {
             let uninit_ptr = T::allocate_uninitialized_cpp_storage();
             let uninit = Pin::new_unchecked(&mut *(uninit_ptr as *mut MaybeUninit<T>));

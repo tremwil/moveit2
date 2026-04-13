@@ -18,7 +18,7 @@ fn adversarial_idents() {
     // conflicts with default generic idents for generated types/fns
     #[derive(Ctor)]
     struct ConflictingTyParams<'lt, C, E> {
-        value: &'lt (E, C),
+        r#value: &'lt (E, C),
     }
     // conflict between generated marker type and struct name
     #[derive(Ctor)]
