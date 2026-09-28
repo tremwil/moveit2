@@ -84,16 +84,35 @@ macro_rules! trivial_copy {
 
 trivial_move! {
     &mut T where [T: ?Sized],
+}
 
+#[cfg(target_has_atomic = "8")]
+trivial_move! {
     core::sync::atomic::AtomicI8,
-    core::sync::atomic::AtomicI16,
-    core::sync::atomic::AtomicI32,
-    core::sync::atomic::AtomicI64,
-    core::sync::atomic::AtomicIsize,
     core::sync::atomic::AtomicU8,
+}
+
+#[cfg(target_has_atomic = "16")]
+trivial_move! {
+    core::sync::atomic::AtomicI16,
     core::sync::atomic::AtomicU16,
+}
+
+#[cfg(target_has_atomic = "32")]
+trivial_move! {
+    core::sync::atomic::AtomicI32,
     core::sync::atomic::AtomicU32,
+}
+
+#[cfg(target_has_atomic = "64")]
+trivial_move! {
+    core::sync::atomic::AtomicI64,
     core::sync::atomic::AtomicU64,
+}
+
+#[cfg(target_has_atomic = "ptr")]
+trivial_move! {
+    core::sync::atomic::AtomicIsize,
     core::sync::atomic::AtomicUsize,
     core::sync::atomic::AtomicPtr<T> where [T],
 }
